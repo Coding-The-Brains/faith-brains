@@ -18,6 +18,9 @@ BATCH = 96
 # Hadith are long; free-tier Voyage caps 10K tokens/request-minute, so keep batches small.
 # Gemini has no such cap — full batches keep the request count well under its daily quota.
 HADITH_BATCH_VOYAGE = 24
+# Free-tier Voyage rejects any single request over its 10K TPM quota, forever — a batch
+# of long hadiths must also fit a char budget (~4 chars/token, with safety margin).
+HADITH_CHAR_BUDGET_VOYAGE = 28_000
 DEFAULT_TRANSLATION_KEY = "english_saheeh"
 MAX_CHARS = 12000  # hadith outliers; Voyage context is generous but keep requests sane
 
@@ -85,7 +88,9 @@ async def embed_quran(embedder: Embedder) -> None:
 
 
 async def embed_hadith(embedder: Embedder) -> None:
-    batch = BATCH if embedder.model.startswith("gemini") else HADITH_BATCH_VOYAGE
+    gemini = embedder.model.startswith("gemini")
+    batch = BATCH if gemini else HADITH_BATCH_VOYAGE
+    char_budget = None if gemini else HADITH_CHAR_BUDGET_VOYAGE
     async with get_sessionmaker()() as session:
         remaining = (
             await session.execute(
@@ -114,6 +119,15 @@ async def embed_hadith(embedder: Embedder) -> None:
             )
             if not rows:
                 break
+            if char_budget is not None:
+                take, total = [], 0
+                for r in rows:
+                    chars = min(len(r.text_english), MAX_CHARS)
+                    if take and total + chars > char_budget:
+                        break
+                    take.append(r)
+                    total += chars
+                rows = take
             vectors = await embedder.embed(
                 [r.text_english[:MAX_CHARS] for r in rows], "document"
             )

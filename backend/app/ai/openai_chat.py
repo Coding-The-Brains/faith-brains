@@ -77,6 +77,38 @@ class OpenAIChat:
         )
         return self._message(response).content or ""
 
+    async def text_stream(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int = 4096,
+        effort: str | None = None,
+    ):
+        """Yields content deltas as they arrive."""
+        kwargs: dict = {}
+        if effort in ("low", "medium", "high") and (
+            model.startswith("gpt-5") or model.startswith("o")
+        ):
+            kwargs["reasoning_effort"] = effort
+        try:
+            stream = await self._get_client().chat.completions.create(
+                model=model,
+                max_completion_tokens=max_tokens,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                stream=True,
+                **kwargs,
+            )
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except OpenAIError as exc:
+            raise AIUnavailable(f"OpenAI API error: {exc}") from exc
+
     async def structured(
         self,
         *,

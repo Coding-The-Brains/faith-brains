@@ -1,5 +1,6 @@
 """Provider-neutral chat interface. Guard + answer engine depend only on this."""
 
+from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
 
@@ -24,6 +25,16 @@ class ChatProvider(Protocol):
         max_tokens: int = 4096,
         effort: str | None = None,
     ) -> str: ...
+
+    def text_stream(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int = 4096,
+        effort: str | None = None,
+    ) -> AsyncIterator[str]: ...
 
     async def structured(
         self,

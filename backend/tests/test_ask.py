@@ -3,6 +3,8 @@
 Uses a FakeClaude so no network is touched; retrieval runs against the seeded test DB.
 """
 
+import json
+
 import pytest
 
 from app.ai import guard
@@ -28,6 +30,12 @@ class FakeClaude(ClaudeChat):
     async def text(self, **kwargs) -> str:
         self.text_calls.append(kwargs)
         return self.answer_text
+
+    async def text_stream(self, **kwargs):
+        self.text_calls.append(kwargs)
+        mid = max(1, len(self.answer_text) // 2)
+        yield self.answer_text[:mid]
+        yield self.answer_text[mid:]
 
 
 @pytest.fixture()
@@ -152,3 +160,47 @@ async def test_ask_validates_question_length(client, fake_ask):
     fake_ask()
     resp = await client.post("/api/v1/ask", json={"question": "hi"})
     assert resp.status_code == 422
+
+
+async def _sse_events(client, question: str) -> list[dict]:
+    events = []
+    async with client.stream(
+        "POST", "/api/v1/ask/stream", json={"question": question}
+    ) as resp:
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        async for line in resp.aiter_lines():
+            if line.startswith("data: "):
+                events.append(json.loads(line[len("data: "):]))
+    return events
+
+
+async def test_ask_stream_event_sequence_and_content(client, fake_ask):
+    fake_ask(category="educational")
+    events = await _sse_events(client, "What does the Quran say about drowsiness and sleep?")
+    kinds = [e["event"] for e in events]
+    assert kinds[0] == "meta" and kinds[-1] == "done"
+    assert "sources" in kinds and "delta" in kinds
+    deltas = "".join(e["text"] for e in events if e["event"] == "delta")
+    done = events[-1]
+    assert deltas == "Grounded answer [1]."
+    assert done["answer"] == "Grounded answer [1]."
+    assert done["disclaimer"]
+    assert any(s["reference"] == "2:255" for s in done["sources"])
+
+
+async def test_ask_stream_crisis_is_deterministic(client, fake_ask):
+    fake = fake_ask(category="sensitive_crisis")
+    events = await _sse_events(client, "I can't go on anymore")
+    assert [e["event"] for e in events] == ["meta", "done"]
+    assert events[-1]["answer"] == guard.CRISIS_RESPONSE
+    assert fake.text_calls == []  # crisis lane must never hit the model
+
+
+async def test_surah_pagination(client):
+    full = (await client.get("/api/v1/quran/2")).json()
+    assert len(full["verses"]) >= 2
+    page = (await client.get("/api/v1/quran/2?offset=1&limit=1")).json()
+    assert page["offset"] == 1 and page["limit"] == 1
+    assert len(page["verses"]) == 1
+    assert page["verses"][0]["ayah"] == full["verses"][1]["ayah"]

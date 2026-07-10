@@ -1,6 +1,8 @@
+import json
 import time
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -75,6 +77,8 @@ def _verse_out(v: QuranVerse) -> schemas.VerseOut:
 @router.get("/quran/{surah_number}", response_model=schemas.SurahDetailOut)
 async def surah_detail(
     surah_number: int,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(0, ge=0, le=300),  # 0 = all verses (long surahs should paginate)
     session: AsyncSession = Depends(get_session),
 ):
     surah = await session.get(Surah, surah_number)
@@ -85,10 +89,15 @@ async def surah_detail(
         .options(selectinload(QuranVerse.translations).selectinload(QuranTranslation.edition))
         .where(QuranVerse.surah_number == surah_number)
         .order_by(QuranVerse.ayah_number)
+        .offset(offset)
     )
+    if limit:
+        stmt = stmt.limit(limit)
     verses = (await session.execute(stmt)).scalars().all()
     return schemas.SurahDetailOut(
         surah=schemas.SurahOut.model_validate(surah),
+        offset=offset,
+        limit=limit,
         verses=[_verse_out(v) for v in verses],
     )
 
@@ -251,6 +260,73 @@ async def ask(
     )
     await session.commit()
     return schemas.AskResponse(question=body.question, **outcome)
+
+
+@router.post("/ask/stream", dependencies=[Depends(limit_ask)])
+async def ask_stream(
+    body: schemas.AskRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """SSE variant of /ask: events arrive as `data: {json}` lines —
+    meta (category) -> sources -> delta* -> done (full payload), or error."""
+    if not answer_service.chat.available:
+        raise HTTPException(
+            503,
+            "AI answers are not configured on this server "
+            "(set OPENAI_API_KEY or ANTHROPIC_API_KEY)",
+        )
+    started = time.monotonic()
+    provider = type(answer_service.chat).__name__
+    model = answer_service.chat.answer_model
+
+    def sse(event: dict) -> str:
+        return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    async def gen():
+        outcome: dict | None = None
+        try:
+            async for event in answer_service.ask_stream(
+                session, body.question, scope=body.scope
+            ):
+                if event.get("event") == "done":
+                    outcome = event
+                yield sse(event)
+        except AIUnavailable as exc:
+            yield sse({"event": "error", "detail": f"AI answer engine unavailable: {exc}"})
+            session.add(
+                AskLog(
+                    question=body.question,
+                    provider=provider,
+                    model=model,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    status="error",
+                    error=str(exc)[:2000],
+                )
+            )
+            await session.commit()
+            return
+        if outcome is not None:
+            session.add(
+                AskLog(
+                    question=body.question,
+                    category=outcome["category"],
+                    answer=outcome["answer"],
+                    sources=[
+                        {"type": s.get("type"), "reference": s.get("reference")}
+                        for s in outcome["sources"]
+                    ],
+                    provider=provider,
+                    model=model,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                )
+            )
+            await session.commit()
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get(

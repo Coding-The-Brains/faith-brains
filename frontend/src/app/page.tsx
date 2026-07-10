@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { AskResponse, SearchResult } from "@/lib/api";
+import type { AskResponse, AskStreamEvent, SearchResult } from "@/lib/api";
 
 const SAMPLES = [
   "What does the Quran say about patience?",
@@ -73,16 +73,61 @@ export default function AskPage() {
     setError(null);
     setResult(null);
     try {
-      const res = await fetch("/api/v1/ask", {
+      const res = await fetch("/api/v1/ask/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: trimmed }),
       });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.detail ?? `Something went wrong (${res.status}). Try again.`);
-      } else {
-        setResult(body);
+      if (!res.ok || !res.body) {
+        const body = await res.json().catch(() => null);
+        setError(body?.detail ?? `Something went wrong (${res.status}). Try again.`);
+        return;
+      }
+
+      // Read SSE events and paint the answer as it streams in.
+      let live: AskResponse = {
+        question: trimmed,
+        category: "educational",
+        answer: "",
+        sources: [],
+        disclaimer: "",
+      };
+      const apply = (evt: AskStreamEvent) => {
+        if (evt.event === "meta" && evt.category) {
+          live = { ...live, category: evt.category };
+        } else if (evt.event === "sources" && evt.sources) {
+          live = { ...live, sources: evt.sources };
+        } else if (evt.event === "delta" && evt.text) {
+          live = { ...live, answer: live.answer + evt.text };
+        } else if (evt.event === "done") {
+          live = {
+            ...live,
+            answer: evt.answer ?? live.answer,
+            category: evt.category ?? live.category,
+            sources: evt.sources ?? live.sources,
+            disclaimer: evt.disclaimer ?? "",
+          };
+        } else if (evt.event === "error") {
+          setError(evt.detail ?? "The answer engine failed mid-response. Try again.");
+          return;
+        }
+        setResult(live);
+      };
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let sep;
+        while ((sep = buf.indexOf("\n\n")) !== -1) {
+          const frame = buf.slice(0, sep);
+          buf = buf.slice(sep + 2);
+          const data = frame.split("\n").find((l) => l.startsWith("data: "));
+          if (data) apply(JSON.parse(data.slice(6)) as AskStreamEvent);
+        }
       }
     } catch {
       setError("Could not reach the server. Is the backend running?");

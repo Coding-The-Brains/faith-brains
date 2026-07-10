@@ -45,6 +45,12 @@ This question asks for a personal religious ruling. You MUST NOT provide one. In
 3. State clearly that this depends on personal circumstances you cannot judge, and that a qualified scholar or local imam should be consulted for their specific case."""
 
 
+_NO_SOURCES_MESSAGE = (
+    "I couldn't find relevant passages in the Quran or Hadith collections for "
+    "that question. Try rephrasing it, or browse the Quran and Hadith tabs directly."
+)
+
+
 class AnswerService:
     def __init__(self, chat: ChatProvider | None = None, search: SearchService | None = None):
         self.chat = chat or get_chat_provider()
@@ -61,12 +67,7 @@ class AnswerService:
         retrieval = await self.search.search(session, question, scope=scope, k=SOURCE_COUNT)
         sources = retrieval["results"]
         if not sources:
-            return self._respond(
-                classification,
-                "I couldn't find relevant passages in the Quran or Hadith collections for "
-                "that question. Try rephrasing it, or browse the Quran and Hadith tabs directly.",
-                [],
-            )
+            return self._respond(classification, _NO_SOURCES_MESSAGE, [])
 
         system = _ANSWER_SYSTEM
         if classification.category == "fatwa_seeking":
@@ -80,6 +81,46 @@ class AnswerService:
             effort="medium",
         )
         return self._respond(classification, answer.strip(), sources)
+
+    async def ask_stream(self, session: AsyncSession, question: str, scope: str = "all"):
+        """Same flow as ask(), but yields event dicts as work completes:
+        {"event": "meta"} -> {"event": "sources"} -> {"event": "delta"}* -> {"event": "done"}.
+        The done event carries the full ask() payload so callers can log it identically.
+        Deterministic lanes (crisis / out-of-scope / no sources) skip straight to done."""
+        classification = await guard.classify(question, self.chat)
+        yield {"event": "meta", "category": classification.category}
+
+        if classification.category == "sensitive_crisis":
+            yield {"event": "done", **self._respond(classification, guard.CRISIS_RESPONSE, [])}
+            return
+        if classification.category == "out_of_scope":
+            yield {"event": "done", **self._respond(classification, guard.OUT_OF_SCOPE_RESPONSE, [])}
+            return
+
+        retrieval = await self.search.search(session, question, scope=scope, k=SOURCE_COUNT)
+        sources = retrieval["results"]
+        if not sources:
+            yield {"event": "done", **self._respond(classification, _NO_SOURCES_MESSAGE, [])}
+            return
+
+        yield {"event": "sources", "sources": sources}
+
+        system = _ANSWER_SYSTEM
+        if classification.category == "fatwa_seeking":
+            system += _FATWA_ADDENDUM
+
+        parts: list[str] = []
+        async for delta in self.chat.text_stream(
+            model=self.chat.answer_model,
+            system=system,
+            user=self._build_prompt(question, sources),
+            max_tokens=8000,
+            effort="medium",
+        ):
+            parts.append(delta)
+            yield {"event": "delta", "text": delta}
+
+        yield {"event": "done", **self._respond(classification, "".join(parts).strip(), sources)}
 
     def _respond(self, classification, answer: str, sources: list) -> dict:
         return {

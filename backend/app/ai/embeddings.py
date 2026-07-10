@@ -67,11 +67,19 @@ class VoyageEmbedder:
                     if since < self._min_interval:
                         await asyncio.sleep(self._min_interval - since)
                 self._last_request = asyncio.get_event_loop().time()
-                resp = await client.post(
-                    _API_URL,
-                    json=payload,
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                )
+                try:
+                    resp = await client.post(
+                        _API_URL,
+                        json=payload,
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                    )
+                except httpx.HTTPError as exc:  # DNS blips, timeouts, resets — retryable
+                    if attempt < _MAX_RETRIES - 1:
+                        wait = min(2.0**attempt, _MAX_WAIT)
+                        log.warning("Voyage network error (%s), retrying in %.0fs", exc, wait)
+                        await asyncio.sleep(wait)
+                        continue
+                    raise EmbeddingsUnavailable(f"Voyage network error: {exc}") from exc
                 if resp.status_code == 200:
                     data = resp.json()["data"]
                     return [row["embedding"] for row in data]

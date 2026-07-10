@@ -27,7 +27,7 @@ export type Verse = {
   translations: Translation[];
 };
 
-export type SurahDetail = { surah: Surah; verses: Verse[] };
+export type SurahDetail = { surah: Surah; offset: number; limit: number; verses: Verse[] };
 
 export type Grading = { name: string | null; grade: string | null };
 
@@ -94,6 +94,17 @@ export type AskResponse = {
   disclaimer: string;
 };
 
+// One SSE event from POST /ask/stream: meta -> sources -> delta* -> done | error
+export type AskStreamEvent = {
+  event: "meta" | "sources" | "delta" | "done" | "error";
+  category?: AskResponse["category"];
+  sources?: SearchResult[];
+  text?: string;
+  answer?: string;
+  disclaimer?: string;
+  detail?: string;
+};
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BACKEND}/api/v1${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`API ${res.status} for ${path}`);
@@ -102,7 +113,10 @@ async function get<T>(path: string): Promise<T> {
 
 export const api = {
   surahs: () => get<Surah[]>("/quran/surahs"),
-  surah: (n: number) => get<SurahDetail>(`/quran/${n}`),
+  surah: (n: number, offset = 0, limit = 0) =>
+    get<SurahDetail>(
+      `/quran/${n}${offset || limit ? `?offset=${offset}&limit=${limit}` : ""}`
+    ),
   collections: () => get<Collection[]>("/hadith/collections"),
   hadithList: (key: string, offset: number, limit = 20) =>
     get<HadithList>(`/hadith/${key}?offset=${offset}&limit=${limit}`),

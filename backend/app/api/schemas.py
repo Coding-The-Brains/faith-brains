@@ -52,6 +52,8 @@ class VerseOut(BaseModel):
 
 class SurahDetailOut(BaseModel):
     surah: SurahOut
+    offset: int = 0
+    limit: int = 0  # 0 = unpaginated (all verses); surah.ayah_count is the total
     verses: list[VerseOut]
 
 

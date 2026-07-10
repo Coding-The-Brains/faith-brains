@@ -1,0 +1,25 @@
+# Render Blueprint — deploys the FastAPI backend as a free web service.
+# In the Render dashboard: New + -> Blueprint -> select this repo.
+services:
+  - type: web
+    name: faithbrains-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_URL          # Neon connection string, postgresql+asyncpg://...?ssl=require
+        sync: false
+      - key: OPENAI_API_KEY        # answer engine (gpt-5-mini / gpt-5-nano)
+        sync: false
+      - key: VOYAGE_API_KEY        # query embeddings for hybrid search
+        sync: false
+      - key: ADMIN_TOKEN           # long random string; admin API is disabled if left unset
+        sync: false
+      - key: CORS_ORIGINS          # e.g. https://faithbrains.vercel.app
+        sync: false
+      - key: EMBEDDING_PROVIDER
+        value: voyage
+      - key: AI_PROVIDER
+        value: auto

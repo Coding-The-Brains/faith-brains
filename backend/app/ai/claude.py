@@ -70,6 +70,32 @@ class ClaudeChat:
             raise ClaudeUnavailable("Claude declined to answer this request")
         return "".join(b.text for b in response.content if b.type == "text")
 
+    async def text_stream(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int = 4096,
+        effort: str | None = None,
+    ):
+        """Yields text deltas as they arrive."""
+        kwargs: dict = {}
+        if effort:
+            kwargs["output_config"] = {"effort": effort}
+        try:
+            async with self._get_client().messages.stream(
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+                **kwargs,
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
+        except APIStatusError as exc:
+            raise ClaudeUnavailable(f"Claude API error {exc.status_code}: {exc.message}") from exc
+
     async def structured(
         self,
         *,
