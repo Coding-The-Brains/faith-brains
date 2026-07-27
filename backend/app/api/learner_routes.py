@@ -4,6 +4,7 @@ Identity is a client-minted UUID in the X-Session-Id header (no accounts, no
 belief profiling). A future auth layer can claim learners.session_id rows.
 """
 
+import logging
 import re
 from datetime import UTC, datetime
 
@@ -13,7 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import schemas
-from app.content.learning_paths import PATHS, PATHS_BY_KEY
+from app.content.learning_paths import PATHS, PATHS_BY_KEY, QUIZZES
 from app.content.personas import PERSONAS
 from app.db.engine import get_session
 from app.db.models import (
@@ -29,6 +30,8 @@ from app.db.models import (
     SavedItem,
 )
 from app.retrieval.service import DEFAULT_TRANSLATION_KEY
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -335,7 +338,12 @@ async def path_detail(
     done = await _completed_steps(session, learner, path_key)
     steps = [await _hydrate_step(session, s, done) for s in p["steps"]]
     return schemas.PathDetailOut(
-        key=p["key"], title=p["title"], description=p["description"], steps=steps
+        key=p["key"],
+        title=p["title"],
+        description=p["description"],
+        steps=steps,
+        quiz=QUIZZES.get(path_key, []),
+        quiz_completed="quiz" in done,
     )
 
 
@@ -347,7 +355,8 @@ async def complete_step(
     session: AsyncSession = Depends(get_session),
 ):
     p = PATHS_BY_KEY.get(path_key)
-    if p is None or step_key not in {s["key"] for s in p["steps"]}:
+    valid = {s["key"] for s in p["steps"]} | ({"quiz"} if QUIZZES.get(path_key) else set()) if p else set()
+    if p is None or step_key not in valid:
         raise HTTPException(404, "unknown path or step")
     await session.execute(
         pg_insert(PathProgress)
@@ -359,3 +368,143 @@ async def complete_step(
     return schemas.PathProgressOut(
         path_key=path_key, completed=sorted(done), step_count=len(p["steps"])
     )
+
+
+_RECOMMEND_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "suggestions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "path_key": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["path_key", "reason"],
+            },
+        },
+        "explore_query": {"type": ["string", "null"]},
+    },
+    "required": ["suggestions", "explore_query"],
+}
+
+
+def _rules_suggestions(learner: Learner, progress: dict[str, int]) -> list[dict]:
+    """Deterministic fallback: in-progress paths, then persona picks, unstarted only."""
+    persona_recs: list[str] = next(
+        (p["recommended_paths"] for p in PERSONAS if p["key"] == learner.persona), []
+    )
+    keys = [k for k, done in progress.items() if 0 < done < len(PATHS_BY_KEY[k]["steps"])]
+    keys += [k for k in persona_recs if progress.get(k, 0) == 0]
+    keys += [p["key"] for p in PATHS if progress.get(p["key"], 0) == 0]
+    seen: list[str] = []
+    for k in keys:
+        if k not in seen:
+            seen.append(k)
+    return [
+        {
+            "path_key": k,
+            "reason": "Pick up where you left off."
+            if 0 < progress.get(k, 0) < len(PATHS_BY_KEY[k]["steps"])
+            else "A good fit for how you chose to learn.",
+        }
+        for k in seen[:3]
+    ]
+
+
+@router.get("/learn/recommend", response_model=schemas.RecommendOut)
+async def recommend_next(
+    learner: Learner = Depends(get_learner),
+    session: AsyncSession = Depends(get_session),
+):
+    """Hybrid next-topic recommendations: the AI picks from the real path catalog using
+    the learner's own questions + progress; deterministic persona/progress rules answer
+    when the AI is unavailable or has nothing to go on. AI output is validated against
+    the catalog server-side — it can never invent a path."""
+    from app.ai.provider import get_chat_provider
+
+    progress = {
+        p["key"]: len(await _completed_steps(session, learner, p["key"]) & {s["key"] for s in p["steps"]})
+        for p in PATHS
+    }
+
+    recent_questions = [
+        row[0]
+        for row in (
+            await session.execute(
+                select(Message.content)
+                .join(Conversation)
+                .where(Conversation.learner_id == learner.id, Message.role == "user")
+                .order_by(Message.id.desc())
+                .limit(10)
+            )
+        ).all()
+    ]
+
+    def rules() -> schemas.RecommendOut:
+        return schemas.RecommendOut(
+            source="rules",
+            suggestions=[
+                schemas.RecommendSuggestionOut(
+                    path_key=s["path_key"],
+                    title=PATHS_BY_KEY[s["path_key"]]["title"],
+                    description=PATHS_BY_KEY[s["path_key"]]["description"],
+                    reason=s["reason"],
+                )
+                for s in _rules_suggestions(learner, progress)
+            ],
+        )
+
+    chat = get_chat_provider()
+    if not chat.available or not recent_questions:
+        return rules()  # nothing personal to reason over, or AI down — rules cover it
+
+    catalog = "\n".join(
+        f"- {p['key']}: {p['title']} — {p['description']} "
+        f"[{progress[p['key']]}/{len(p['steps'])} studied]"
+        for p in PATHS
+    )
+    try:
+        result = await chat.structured(
+            model=chat.classifier_model,
+            schema=_RECOMMEND_SCHEMA,
+            system=(
+                "You recommend what a learner should study next in an Islamic learning app.\n"
+                "Pick up to 3 paths from the catalog ONLY (use exact path_key values). "
+                "Ground every reason in the learner's own recent questions or progress, in one "
+                "warm plain sentence. Prefer unfinished or unstarted paths over completed ones.\n"
+                "If their questions point to a topic no path covers, set explore_query to a short "
+                "search phrase for it; else null."
+            ),
+            user=(
+                f"Catalog:\n{catalog}\n\n"
+                f"Learner persona: {learner.persona or 'unspecified'}\n"
+                f"Recent questions (newest first):\n"
+                + "\n".join(f"- {q[:200]}" for q in recent_questions)
+            ),
+            max_tokens=800,
+        )
+        suggestions = [
+            schemas.RecommendSuggestionOut(
+                path_key=s["path_key"],
+                title=PATHS_BY_KEY[s["path_key"]]["title"],
+                description=PATHS_BY_KEY[s["path_key"]]["description"],
+                reason=str(s.get("reason", ""))[:300],
+            )
+            for s in result.get("suggestions", [])
+            if s.get("path_key") in PATHS_BY_KEY  # catalog-validated: AI cannot invent paths
+        ][:3]
+        if not suggestions:
+            return rules()
+        explore = result.get("explore_query")
+        return schemas.RecommendOut(
+            source="ai",
+            suggestions=suggestions,
+            explore_query=str(explore)[:100] if explore else None,
+        )
+    except Exception:  # noqa: BLE001 — recommendations must never 500; rules always work
+        log.warning("AI recommend failed; serving rules fallback", exc_info=True)
+        return rules()

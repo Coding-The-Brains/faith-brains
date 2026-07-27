@@ -26,8 +26,8 @@ export default async function CollectionPage({
   return (
     <div className="mx-auto max-w-3xl">
       <header className="mb-6">
-        <h1 className="font-display text-3xl text-snow">{list.collection_name}</h1>
-        <p className="mt-1 text-sm text-mist">
+        <h1 className="font-semibold tracking-tight text-3xl text-text">{list.collection_name}</h1>
+        <p className="mt-1 text-sm text-muted">
           {list.total.toLocaleString()} hadith · page {page} of {pages.toLocaleString()}
         </p>
       </header>
@@ -49,14 +49,14 @@ export default async function CollectionPage({
 
       <nav className="mt-8 flex items-center justify-between text-sm">
         {page > 1 ? (
-          <Link href={`/hadith/${collection}?page=${page - 1}`} className="text-goldsoft hover:underline">
+          <Link href={`/hadith/${collection}?page=${page - 1}`} className="text-accent hover:underline">
             ← Previous
           </Link>
         ) : (
           <span />
         )}
         {page < pages ? (
-          <Link href={`/hadith/${collection}?page=${page + 1}`} className="text-goldsoft hover:underline">
+          <Link href={`/hadith/${collection}?page=${page + 1}`} className="text-accent hover:underline">
             Next →
           </Link>
         ) : (

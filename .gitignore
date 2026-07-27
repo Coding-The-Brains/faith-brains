@@ -29,3 +29,6 @@ frontend/out/
 Thumbs.db
 .idea/
 .vscode/
+
+# Local run logs
+*.log

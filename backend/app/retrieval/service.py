@@ -9,6 +9,7 @@ Every result carries which signals produced it, so the API/frontend can show pro
 and so degraded modes (no embeddings yet) are visible instead of silent.
 """
 
+import asyncio
 import logging
 import re
 from collections import defaultdict
@@ -18,9 +19,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.ai.embeddings import Embedder, EmbeddingsUnavailable, get_embedder
-from app.db.models import Edition, HadithCollection, HadithRecord, QuranTranslation, QuranVerse, Surah
+from app.db.engine import get_sessionmaker
+from app.db.models import (
+    Edition,
+    HadithCollection,
+    HadithRecord,
+    QuranTranslation,
+    QuranVerse,
+    Surah,
+    Tafsir,
+)
 from app.retrieval import fulltext, vector
 from app.retrieval.arabic import contains_arabic, normalize_arabic
+from app.retrieval.hadith_meta import extract_isnad, extract_narrator
 from app.retrieval.reference import (
     parse_hadith_reference,
     parse_quran_reference,
@@ -83,6 +94,7 @@ class SearchService:
         scope: str = "all",  # all | quran | hadith
         k: int = 20,
         translation_key: str = DEFAULT_TRANSLATION_KEY,
+        query_embedding: list[float] | None = None,  # precomputed to skip a Voyage call
     ) -> dict:
         query = query.strip()
         if not query:
@@ -102,67 +114,78 @@ class SearchService:
                 if hits:
                     return {"mode": "reference", "signals_used": ["reference"], "results": hits}
 
-        # 2. Hybrid retrieval
-        edition_id = await self._edition_id(session, translation_key)
+        # 2. Hybrid retrieval. The edition lookup (DB) and query embedding (Voyage HTTP
+        # call) are independent, so overlap them; only edition_id touches the session.
+        # A caller may pass a precomputed embedding (semantic cache) to skip the Voyage call.
+        if query_embedding is None:
+            edition_id, query_embedding = await asyncio.gather(
+                self._edition_id(session, translation_key),
+                self.embed_query(query),
+            )
+        else:
+            edition_id = await self._edition_id(session, translation_key)
         arabic_q = normalize_arabic(query) if contains_arabic(query) else None
         fetch_k = max(k * 3, 30)  # overfetch per signal so fusion has material to work with
 
-        query_embedding: list[float] | None = None
-        if self.embedder.available:
-            try:
-                query_embedding = await self.embedder.embed_query(query)
-            except EmbeddingsUnavailable as exc:
-                log.warning("vector signal skipped: %s", exc)
-
         signals_used: set[str] = set()
-        results: list[dict] = []
-
         ft_query = _content_query(query)
         or_query = _or_fallback_query(ft_query)
 
-        if scope in ("all", "quran") and edition_id is not None:
+        async def quran_block(sess: AsyncSession) -> list[dict]:
+            if not (scope in ("all", "quran") and edition_id is not None):
+                return []
             rank_lists: dict[str, list[int]] = {}
-            ft = await fulltext.fulltext_quran(session, ft_query, edition_id, fetch_k)
+            ft = await fulltext.fulltext_quran(sess, ft_query, edition_id, fetch_k)
             if not ft and or_query:
-                ft = await fulltext.fulltext_quran(session, or_query, edition_id, fetch_k)
+                ft = await fulltext.fulltext_quran(sess, or_query, edition_id, fetch_k)
             if ft:
                 rank_lists["fulltext"] = [i for i, _ in ft]
             if query_embedding is not None:
                 vs = await vector.vector_quran(
-                    session, query_embedding, edition_id, fetch_k, self.embedder.model
+                    sess, query_embedding, edition_id, fetch_k, self.embedder.model
                 )
                 if vs:
                     rank_lists["vector"] = [i for i, _ in vs]
             if arabic_q:
-                ar = await fulltext.arabic_quran(session, arabic_q, fetch_k)
+                ar = await fulltext.arabic_quran(sess, arabic_q, fetch_k)
                 if ar:
                     rank_lists["arabic"] = [i for i, _ in ar]
-            fused = rrf_fuse(rank_lists)
             signals_used.update(rank_lists)
-            top = sorted(fused.items(), key=lambda kv: kv[1]["score"], reverse=True)[:k]
-            results += await self._hydrate_quran(session, top, translation_key)
+            top = sorted(rrf_fuse(rank_lists).items(), key=lambda kv: kv[1]["score"], reverse=True)[:k]
+            return await self._hydrate_quran(sess, top, translation_key)
 
-        if scope in ("all", "hadith"):
-            rank_lists = {}
-            ft = await fulltext.fulltext_hadith(session, ft_query, fetch_k)
+        async def hadith_block(sess: AsyncSession) -> list[dict]:
+            if scope not in ("all", "hadith"):
+                return []
+            rank_lists: dict[str, list[int]] = {}
+            ft = await fulltext.fulltext_hadith(sess, ft_query, fetch_k)
             if not ft and or_query:
-                ft = await fulltext.fulltext_hadith(session, or_query, fetch_k)
+                ft = await fulltext.fulltext_hadith(sess, or_query, fetch_k)
             if ft:
                 rank_lists["fulltext"] = [i for i, _ in ft]
             if query_embedding is not None:
-                vs = await vector.vector_hadith(
-                    session, query_embedding, fetch_k, self.embedder.model
-                )
+                vs = await vector.vector_hadith(sess, query_embedding, fetch_k, self.embedder.model)
                 if vs:
                     rank_lists["vector"] = [i for i, _ in vs]
             if arabic_q:
-                ar = await fulltext.arabic_hadith(session, arabic_q, fetch_k)
+                ar = await fulltext.arabic_hadith(sess, arabic_q, fetch_k)
                 if ar:
                     rank_lists["arabic"] = [i for i, _ in ar]
-            fused = rrf_fuse(rank_lists)
             signals_used.update(rank_lists)
-            top = sorted(fused.items(), key=lambda kv: kv[1]["score"], reverse=True)[:k]
-            results += await self._hydrate_hadith(session, top)
+            top = sorted(rrf_fuse(rank_lists).items(), key=lambda kv: kv[1]["score"], reverse=True)[:k]
+            return await self._hydrate_hadith(sess, top)
+
+        # Quran and Hadith retrieval are independent; run them concurrently. A single
+        # AsyncSession can't multiplex queries, so the second block gets its own
+        # connection. When only one corpus is in scope, reuse the request session.
+        if scope == "all":
+            async with get_sessionmaker()() as session2:
+                quran_res, hadith_res = await asyncio.gather(
+                    quran_block(session), hadith_block(session2)
+                )
+            results = quran_res + hadith_res
+        else:
+            results = await quran_block(session) + await hadith_block(session)
 
         results.sort(key=lambda r: r["score"], reverse=True)
         return {
@@ -170,6 +193,17 @@ class SearchService:
             "signals_used": sorted(signals_used),
             "results": results[:k],
         }
+
+    async def embed_query(self, query: str) -> list[float] | None:
+        """Query embedding for the vector signal, or None when embeddings are
+        unavailable (degrades to lexical-only search instead of failing)."""
+        if not self.embedder.available:
+            return None
+        try:
+            return await self.embedder.embed_query(query)
+        except EmbeddingsUnavailable as exc:
+            log.warning("vector signal skipped: %s", exc)
+            return None
 
     # -- reference resolution ------------------------------------------------
 
@@ -238,12 +272,25 @@ class SearchService:
             .where(QuranVerse.id.in_(ids))
         )
         verses = {v.id: v for v in (await session.execute(stmt)).scalars().all()}
+        # Attach per-verse commentary in one query: asbab al-nuzul rows become `context`
+        # (occasion of revelation), everything else is `tafsir` (first source_key wins).
+        tafsirs: dict[int, Tafsir] = {}
+        contexts: dict[int, Tafsir] = {}
+        for t in (
+            await session.execute(
+                select(Tafsir).where(Tafsir.verse_id.in_(ids)).order_by(Tafsir.source_key)
+            )
+        ).scalars():
+            bucket = contexts if "asbab" in t.source_key else tafsirs
+            bucket.setdefault(t.verse_id, t)
         out = []
         for vid in ids:
             v = verses.get(vid)
             if v is None:
                 continue
             tr = next((t for t in v.translations if t.edition.key == translation_key), None)
+            taf = tafsirs.get(vid)
+            ctx = contexts.get(vid)
             out.append(
                 {
                     "type": "quran",
@@ -257,6 +304,12 @@ class SearchService:
                     "arabic": v.text_uthmani,
                     "translation": tr.text if tr else None,
                     "translation_edition": translation_key if tr else None,
+                    "translation_source": tr.edition.name if tr else None,  # human-readable
+                    "revelation_place": v.surah.revelation_place or None,  # Meccan | Medinan
+                    "tafsir": taf.text if taf else None,
+                    "tafsir_source": taf.source_name if taf else None,
+                    "context": ctx.text if ctx else None,  # asbab al-nuzul
+                    "context_source": ctx.source_name if ctx else None,
                     "juz": v.juz,
                     "page": v.page,
                 }
@@ -293,6 +346,8 @@ class SearchService:
                     "arabic": r.text_arabic,
                     "english": r.text_english,
                     "gradings": r.gradings,
+                    "narrator": extract_narrator(r.text_english),
+                    "isnad": extract_isnad(r.text_arabic),
                 }
             )
         return out

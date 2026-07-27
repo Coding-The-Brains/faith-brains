@@ -16,6 +16,7 @@ dependencies = [
     "anthropic>=0.79",
     "openai>=1.60",
     "google-genai>=1.16",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]

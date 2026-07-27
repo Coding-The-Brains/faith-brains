@@ -1,56 +1,129 @@
 @import "tailwindcss";
 
 /* ------------------------------------------------------------------
-   FaithBrains — "Blue Quran" design system
-   Indigo parchment chrome + gold illumination + warm paper reading panes,
-   after the Blue Quran of Kairouan (indigo vellum, gold kufic).
+   FaithBrains — CTB "Aqua Noir" design system
+   Shared portfolio palette (TalentBrains / MedBrains / FaithBrains),
+   exact token values from DESIGN.md §3. Teal family, Geist Sans/Mono,
+   light + dark themes (class strategy via next-themes).
+   Amiri is retained for Arabic script only — Geist has no Arabic glyphs.
 ------------------------------------------------------------------- */
 
-@theme inline {
-  --color-ink: #0d1322; /* app ground — indigo vellum */
-  --color-lapis: #16203c; /* panels */
-  --color-raise: #1d2a4d; /* raised / hover panels */
-  --color-line: #2b3a63; /* hairlines on dark */
-  --color-gold: #c6a548; /* illumination gold */
-  --color-goldsoft: #e8d194; /* bright gold for small text on dark */
-  --color-paper: #f3ecdc; /* reading surface */
-  --color-paperline: #dccfae; /* hairlines on paper */
-  --color-paperink: #262117; /* text on paper */
-  --color-paperfaint: #756c55; /* muted text on paper */
-  --color-mist: #9fadcd; /* muted text on dark */
-  --color-snow: #e9edf7; /* primary text on dark */
+@custom-variant dark (&:where(.dark, .dark *));
 
-  --font-display: var(--font-marcellus);
-  --font-body: var(--font-alegreya-sans);
-  --font-serif: var(--font-alegreya);
+/* Light theme */
+:root {
+  --bg: #f4f8f7;
+  --surface: #ffffff;
+  --elevated: #eef4f2;
+  --border: #dce7e4;
+  --text: #0c1413;
+  --muted: #4f5e5a;
+  --primary: #00b89c;
+  --primary-hover: #00a98c;
+  --on-primary: #04110f;
+  --link: #078573;
+  --accent: #02716d;
+  --accent-soft: #e2f2ee;
+  --success: #059669;
+  --warn: #d97706;
+  --error: #dc2626;
+  --ink: #0c1413;
+  --on-ink: #f4f8f7;
+  --on-ink-muted: rgba(244, 248, 247, 0.62);
+  --hairline: rgba(2, 23, 21, 0.04);
+  --shadow-color: rgba(2, 23, 21, 0.18);
+  --radius: 0.75rem;
+}
+
+/* Dark theme (brand default) */
+.dark {
+  --bg: #060b0b;
+  --surface: #0e1717;
+  --elevated: #15201f;
+  --border: #21302e;
+  --text: #e8edec;
+  --muted: #9db0ad;
+  --primary: #00e6c3;
+  --primary-hover: #2ff0d4;
+  --on-primary: #04110f;
+  --link: #7cf5e0;
+  --accent: #14b8a6;
+  --accent-soft: #0e2422;
+  --success: #34d399;
+  --warn: #fbbf24;
+  --error: #f87171;
+  --ink: #101b1a;
+  --on-ink: #e8edec;
+  --on-ink-muted: rgba(232, 237, 236, 0.6);
+  --hairline: rgba(255, 255, 255, 0.06);
+  --shadow-color: rgba(0, 0, 0, 0.6);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-link: var(--link);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-error: var(--error);
+  --color-ink: var(--ink);
+  --color-on-ink: var(--on-ink);
+  --color-on-ink-muted: var(--on-ink-muted);
+  --color-hairline: var(--hairline);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
   --font-arabic: var(--font-amiri);
+
+  --radius-card: var(--radius);
+
+  /* Only two shadows exist: resting and hover/elevated. Both carry a
+     1px inset hairline highlight (DESIGN.md §3). */
+  --shadow-soft: inset 0 1px 0 0 var(--hairline), 0 1px 2px 0 var(--shadow-color);
+  --shadow-lift:
+    inset 0 1px 0 0 var(--hairline), 0 10px 30px -12px var(--shadow-color);
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    background-color: var(--color-ink);
-    color: var(--color-snow);
-    font-family: var(--font-body);
-    /* faint illumination glow at the top of the page, like gilded edges */
-    background-image: radial-gradient(
-      ellipse 90% 24rem at 50% -8rem,
-      rgba(198, 165, 72, 0.13),
-      transparent 70%
-    );
-    background-repeat: no-repeat;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.02em;
+    font-weight: 600;
+    line-height: 1.1;
   }
 
   ::selection {
-    background: rgba(198, 165, 72, 0.35);
+    background: color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-gold);
+    outline: 2px solid var(--primary);
     outline-offset: 2px;
   }
 
   [lang="ar"] {
-    font-family: var(--font-arabic);
+    font-family: var(--font-amiri), serif;
     direction: rtl;
   }
 
@@ -59,13 +132,82 @@
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-delay: 0.01ms !important;
       transition-duration: 0.01ms !important;
+      transition-delay: 0.01ms !important;
     }
   }
 }
 
+/* Hero focal sequence — the exchange assembling itself, once, on load:
+   question lands, the answer's hairline sweeps (the product's thinking state),
+   citations pop, and each pop summons its source. No loops; the reduced-motion
+   rule above collapses the whole sequence to instant. */
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* the answer card's top hairline slides in and settles centered */
+@keyframes hero-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* citation chips arrive with weight, no bounce */
+@keyframes hero-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* verse and translation settle in after their card */
+@keyframes hero-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @layer components {
-  /* mushaf-style round ayah medallion */
+  /* Scrollable rows that must not show a scrollbar (nav tabs) */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Mono eyebrow / kicker label (DESIGN.md §3 type conventions) */
+  .eyebrow {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 0.625rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Mushaf-style round ayah medallion, recoloured to the teal family */
   .medallion {
     display: inline-flex;
     align-items: center;
@@ -74,16 +216,20 @@
     height: 2.1rem;
     padding: 0 0.3rem;
     border-radius: 9999px;
-    border: 1px solid var(--color-gold);
-    box-shadow: inset 0 0 0 2.5px var(--color-paper), inset 0 0 0 3.5px rgba(198, 165, 72, 0.5);
-    color: #8a6d1f;
-    font-family: var(--font-arabic);
+    border: 1px solid var(--accent);
+    box-shadow:
+      inset 0 0 0 2.5px var(--surface),
+      inset 0 0 0 3.5px color-mix(in srgb, var(--accent) 50%, transparent);
+    color: var(--accent);
+    font-family: var(--font-amiri), serif;
     font-size: 0.95rem;
     line-height: 1;
   }
 
   .medallion-dark {
-    box-shadow: inset 0 0 0 2.5px var(--color-lapis), inset 0 0 0 3.5px rgba(198, 165, 72, 0.5);
-    color: var(--color-goldsoft);
+    box-shadow:
+      inset 0 0 0 2.5px var(--elevated),
+      inset 0 0 0 3.5px color-mix(in srgb, var(--accent) 50%, transparent);
+    color: var(--accent);
   }
 }

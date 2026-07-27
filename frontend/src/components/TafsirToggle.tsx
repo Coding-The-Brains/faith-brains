@@ -30,22 +30,22 @@ export default function TafsirToggle({ surah, ayah }: { surah: number; ayah: num
       <button
         type="button"
         onClick={toggle}
-        className="text-xs tracking-wide text-paperfaint underline decoration-gold/50 underline-offset-4 hover:text-paperink"
+        className="text-xs tracking-wide text-muted underline decoration-primary/50 underline-offset-4 hover:text-text"
       >
         {open ? "Hide tafsir" : "Tafsir"}
       </button>
       {open && (
-        <div className="mt-3 border-t border-paperline pt-3">
-          {loading && <p className="text-xs text-paperfaint">Loading tafsir…</p>}
+        <div className="mt-3 border-t border-border pt-3">
+          {loading && <p className="text-xs text-muted">Loading tafsir…</p>}
           {tafsirs?.length === 0 && (
-            <p className="text-xs text-paperfaint">No tafsir available for this verse.</p>
+            <p className="text-xs text-muted">No tafsir available for this verse.</p>
           )}
           {tafsirs?.map((t) => (
             <div key={t.source_key}>
-              <p className="mb-2 text-xs font-bold tracking-wide text-paperfaint">
+              <p className="mb-2 text-xs font-bold tracking-wide text-muted">
                 {t.source_name}
               </p>
-              <div className="max-h-80 space-y-3 overflow-y-auto pr-2 font-serif text-sm leading-relaxed text-paperink/85">
+              <div className="max-h-80 space-y-3 overflow-y-auto pr-2 text-sm leading-relaxed text-text/85">
                 {t.text.split(/\n{2,}/).map((para, i) => (
                   <p key={i}>{para}</p>
                 ))}

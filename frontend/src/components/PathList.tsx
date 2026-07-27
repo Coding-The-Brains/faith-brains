@@ -37,14 +37,21 @@ export default function PathList() {
   }, []);
 
   if (paths === null) {
-    return <p className="text-sm text-mist">Loading paths…</p>;
+    return <p className="text-sm text-muted">Loading paths…</p>;
   }
   if (paths.length === 0) return null;
 
-  // Recommended paths first; original order preserved within each group
-  const ordered = [...paths].sort(
-    (a, b) => Number(recommended.has(b.key)) - Number(recommended.has(a.key))
-  );
+  // Progress-aware ordering: paths you're mid-way through first (continue!), then
+  // persona-recommended unstarted ones, then the rest; fully-completed sink last.
+  // Original order preserved within each group.
+  const rank = (p: PathSummary) => {
+    const donePct = p.step_count ? p.completed_count / p.step_count : 0;
+    if (donePct > 0 && donePct < 1) return 0; // in progress
+    if (donePct === 0 && recommended.has(p.key)) return 1; // recommended, unstarted
+    if (donePct === 0) return 2; // unstarted
+    return 3; // completed
+  };
+  const ordered = [...paths].sort((a, b) => rank(a) - rank(b));
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -54,22 +61,30 @@ export default function PathList() {
           <Link
             key={p.key}
             href={`/learn/${p.key}`}
-            className="block rounded-lg border border-line bg-lapis p-5 transition-colors hover:border-gold/50 hover:bg-raise"
+            className="block rounded-lg border border-border bg-surface p-5 transition-colors hover:border-primary/50 hover:bg-elevated"
           >
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-display text-lg text-snow">{p.title}</h3>
-              {recommended.has(p.key) && (
-                <span className="mt-1 shrink-0 rounded-full border border-gold/40 px-2 py-0.5 text-[10px] tracking-wide text-goldsoft">
+              <h3 className="font-semibold tracking-tight text-lg text-text">{p.title}</h3>
+              {p.completed_count > 0 && p.completed_count < p.step_count ? (
+                <span className="mt-1 shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold tracking-wide text-on-primary">
+                  Continue
+                </span>
+              ) : p.completed_count === p.step_count && p.step_count > 0 ? (
+                <span className="mt-1 shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] tracking-wide text-muted/70">
+                  ✓ Completed
+                </span>
+              ) : recommended.has(p.key) ? (
+                <span className="mt-1 shrink-0 rounded-full border border-primary/40 px-2 py-0.5 text-[10px] tracking-wide text-accent">
                   Recommended for you
                 </span>
-              )}
+              ) : null}
             </div>
-            <p className="mt-1 text-sm leading-relaxed text-mist">{p.description}</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">{p.description}</p>
             <div className="mt-4">
-              <div className="h-1.5 overflow-hidden rounded-full bg-ink">
-                <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
+              <div className="h-1.5 overflow-hidden rounded-full bg-bg">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
               </div>
-              <p className="mt-1.5 text-xs text-mist/80">
+              <p className="mt-1.5 text-xs text-muted/80">
                 {p.completed_count}/{p.step_count} studied
               </p>
             </div>

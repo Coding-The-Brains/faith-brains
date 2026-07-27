@@ -61,7 +61,8 @@ async def run(slug: str | None = None) -> None:
                     continue
                 payload = resp.json()
                 # per-surah file is a bare list of {surah, ayah, text}; older forks wrap it
-                ayahs = payload.get("ayahs", []) if isinstance(payload, dict) else payload
+                # some editions ship {"ayahs": null} for surahs they don't cover
+                ayahs = (payload.get("ayahs") or []) if isinstance(payload, dict) else (payload or [])
                 rows = []
                 for a in ayahs:
                     vid = verse_ids.get((a.get("surah"), a.get("ayah")))

@@ -107,6 +107,12 @@ class SearchResultOut(BaseModel):
     arabic: str | None = None
     translation: str | None = None
     translation_edition: str | None = None
+    translation_source: str | None = None
+    revelation_place: str | None = None
+    tafsir: str | None = None
+    tafsir_source: str | None = None
+    context: str | None = None  # asbab al-nuzul (occasion of revelation)
+    context_source: str | None = None
     juz: int | None = None
     page: int | None = None
     # hadith fields
@@ -117,6 +123,8 @@ class SearchResultOut(BaseModel):
     book_name: str | None = None
     english: str | None = None
     gradings: list[GradingOut] | None = None
+    narrator: str | None = None  # extracted from the English opener, where available
+    isnad: str | None = None  # leading Arabic chain, where available
 
 
 class SearchResponse(BaseModel):
@@ -135,6 +143,7 @@ class AskRequest(BaseModel):
     scope: Literal["all", "quran", "hadith"] = "all"
     persona: PersonaKey | None = None
     conversation_id: int | None = None  # continue an existing thread
+    effort: Literal["minimal", "low", "medium", "high"] = "low"  # answer-model reasoning depth
 
 
 class AskResponse(BaseModel):
@@ -200,17 +209,39 @@ class PathStepOut(BaseModel):
     completed: bool
 
 
+class QuizQuestionOut(BaseModel):
+    q: str
+    options: list[str]
+    answer: int  # index into options; graded client-side (revision aid, not an exam)
+    why: str  # the source the answer comes from
+
+
 class PathDetailOut(BaseModel):
     key: str
     title: str
     description: str
     steps: list[PathStepOut]
+    quiz: list[QuizQuestionOut] = []
+    quiz_completed: bool = False
 
 
 class PathProgressOut(BaseModel):
     path_key: str
     completed: list[str]
     step_count: int
+
+
+class RecommendSuggestionOut(BaseModel):
+    path_key: str
+    title: str
+    description: str
+    reason: str
+
+
+class RecommendOut(BaseModel):
+    source: Literal["ai", "rules"]  # rules = deterministic fallback (AI down or no signal)
+    suggestions: list[RecommendSuggestionOut]
+    explore_query: str | None = None  # a search to run when their questions point past the catalog
 
 
 class PersonaOut(BaseModel):

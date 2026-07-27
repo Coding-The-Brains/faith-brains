@@ -19,7 +19,10 @@ import {
   type PersonaKey,
 } from "@/lib/persona";
 import { sessionHeaders } from "@/lib/session";
+import { gradeTone } from "@/components/HadithCard";
+import MicButton from "@/components/MicButton";
 import PersonaOnboarding from "@/components/PersonaOnboarding";
+import Reveal from "@/components/Reveal";
 
 // Fallback suggestions when no persona is chosen or the catalogue is unreachable
 const SAMPLES = [
@@ -29,9 +32,119 @@ const SAMPLES = [
   "Which hadith is about intentions?",
 ];
 
+function LandingPage() {
+  return (
+    <div className="pb-20">
+      <section className="grid min-h-[calc(100dvh-11rem)] items-center gap-10 py-10 md:grid-cols-[0.9fr_1.1fr] md:py-14">
+        <div className="relative z-10">
+          <h1 className="font-semibold tracking-tight max-w-lg text-5xl leading-[1.04] text-text sm:text-6xl">
+            Learn from the sources themselves.
+          </h1>
+          <p className="mt-5 max-w-md text-lg leading-relaxed text-muted">
+            Every answer traces back to its source.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link
+              href="#ask"
+              className="rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary transition-transform hover:bg-primary-hover active:translate-y-px"
+            >
+              Start exploring
+            </Link>
+            <Link
+              href="/learn"
+              className="rounded-full border border-primary/50 px-5 py-3 text-sm font-bold text-accent transition-colors hover:border-primary hover:text-text active:translate-y-px"
+            >
+              Browse lessons
+            </Link>
+          </div>
+        </div>
+
+        {/* Crafted product mock: a real exchange — question, cited answer, and the
+            source receipt beneath it. No photography (design-system rule). */}
+        <div className="relative mx-auto w-full max-w-md md:mx-0 md:justify-self-end">
+          {/* Rub el Hizb line geometry echoing the logo mark */}
+          <svg
+            viewBox="0 0 220 220"
+            className="pointer-events-none absolute -right-4 -top-20 h-44 w-44 text-border"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+            aria-hidden="true"
+          >
+            <rect x="45" y="45" width="130" height="130" />
+            <rect x="45" y="45" width="130" height="130" transform="rotate(45 110 110)" />
+            <circle cx="110" cy="110" r="4" fill="var(--primary)" stroke="none" />
+          </svg>
+
+          <div className="relative space-y-3">
+            {/* the student's question lands */}
+            <div className="flex animate-[hero-rise_0.5s_cubic-bezier(0.22,1,0.36,1)_both] justify-end">
+              <p className="rounded-2xl rounded-br-sm border border-border bg-elevated px-4 py-2.5 text-sm text-text shadow-soft">
+                What does the Quran say about patience?
+              </p>
+            </div>
+
+            {/* the answer arrives: hairline sweeps in, then the citations pop */}
+            <div className="animate-[hero-rise_0.6s_cubic-bezier(0.22,1,0.36,1)_0.35s_both] overflow-hidden rounded-2xl border border-border bg-surface shadow-lift">
+              <div className="h-px overflow-hidden">
+                <div className="h-full w-full animate-[hero-slide_0.9s_cubic-bezier(0.16,1,0.3,1)_0.5s_both] bg-gradient-to-r from-transparent via-primary to-transparent" />
+              </div>
+              <div className="p-5">
+                <p className="eyebrow">Educational answer</p>
+                <p className="mt-3 text-sm leading-relaxed text-text">
+                  Believers are told to seek help through patience and prayer
+                  <span className="ml-0.5 inline-block animate-[hero-pop_0.35s_cubic-bezier(0.22,1,0.36,1)_1s_both] rounded bg-accent-soft px-1 align-super text-[0.65rem] font-bold text-accent">1</span>,
+                  and those who endure are promised a reward without measure
+                  <span className="ml-0.5 inline-block animate-[hero-pop_0.35s_cubic-bezier(0.22,1,0.36,1)_1.15s_both] rounded bg-accent-soft px-1 align-super text-[0.65rem] font-bold text-accent">2</span>.
+                </p>
+              </div>
+            </div>
+
+            {/* each citation summons its receipt */}
+            <div className="animate-[hero-rise_0.6s_cubic-bezier(0.22,1,0.36,1)_1.15s_both] rounded-2xl border border-border bg-elevated p-5 shadow-lift sm:ml-10">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-accent">
+                  [1] Quran 2:153 · Al-Baqara
+                </p>
+                <span className="medallion medallion-dark shrink-0 animate-[hero-pop_0.4s_cubic-bezier(0.22,1,0.36,1)_1.5s_both]">١٥٣</span>
+              </div>
+              <p lang="ar" className="mt-3 animate-[hero-fade_0.5s_cubic-bezier(0.22,1,0.36,1)_1.6s_both] text-right text-xl leading-[2] text-text">
+                يَا أَيُّهَا الَّذِينَ آمَنُوا اسْتَعِينُوا بِالصَّبْرِ وَالصَّلَاةِ إِنَّ اللَّهَ مَعَ الصَّابِرِينَ
+              </p>
+              <p className="mt-2 animate-[hero-fade_0.5s_cubic-bezier(0.22,1,0.36,1)_1.7s_both] text-xs leading-relaxed text-muted">
+                “O you who have believed, seek help through patience and prayer. Indeed,
+                Allah is with the patient.”
+              </p>
+              <p className="mt-3 animate-[hero-fade_0.5s_cubic-bezier(0.22,1,0.36,1)_1.8s_both] border-t border-border pt-2 font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+                [2] Quran 39:10 · Az-Zumar
+              </p>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-8 border-y border-border py-10 md:grid-cols-3">
+        <Reveal>
+          <p className="font-semibold tracking-tight text-3xl text-accent">Quran</p>
+          <p className="mt-2 leading-relaxed text-muted">Search, read, and save verses.</p>
+        </Reveal>
+        <Reveal delay={60}>
+          <p className="font-semibold tracking-tight text-3xl text-accent">Hadith</p>
+          <p className="mt-2 leading-relaxed text-muted">Authentic narrations, clearly referenced.</p>
+        </Reveal>
+        <Reveal delay={120}>
+          <p className="font-semibold tracking-tight text-3xl text-accent">Learning paths</p>
+          <p className="mt-2 leading-relaxed text-muted">Core topics at your own pace.</p>
+        </Reveal>
+      </section>
+    </div>
+  );
+}
+
 const CATEGORY_LABEL: Record<AskResponse["category"], string> = {
   educational: "Educational answer",
-  fatwa_seeking: "General teaching — not a ruling",
+  fatwa_seeking: "General teaching, not a ruling",
   sensitive_crisis: "Please seek support",
   out_of_scope: "Outside FaithBrains' scope",
 };
@@ -48,14 +161,14 @@ function AnswerBody({ text }: { text: string }) {
   return (
     <div className="space-y-4">
       {text.split(/\n{2,}/).map((para, pi) => (
-        <p key={pi} className="font-serif leading-relaxed text-paperink/95">
+        <p key={pi} className="leading-relaxed text-text/95">
           {para.split(/(\[\d+\])/g).map((part, i) => {
             const m = /^\[(\d+)\]$/.exec(part);
             if (!m) return <span key={i}>{part}</span>;
             return (
               <span
                 key={i}
-                className="mx-0.5 rounded bg-gold/15 px-1 align-super text-[0.7em] font-bold text-[#8a6d1f]"
+                className="mx-0.5 rounded bg-primary/15 px-1 align-super text-[0.7em] font-bold text-accent"
               >
                 {m[1]}
               </span>
@@ -70,40 +183,145 @@ function AnswerBody({ text }: { text: string }) {
 function SourceCard({ n, s }: { n: number; s: SearchResult }) {
   const isQuran = s.type === "quran";
   return (
-    <div className="rounded-lg border border-line bg-lapis p-4">
-      <p className="text-xs tracking-wide text-goldsoft">
-        [{n}]{" "}
-        {isQuran
-          ? `Quran ${s.reference}${s.surah_name ? ` — ${s.surah_name}` : ""}`
-          : s.reference}
-      </p>
-      <p className="mt-2 text-sm font-serif leading-relaxed text-snow/90">
+    <div className="rounded-lg border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-xs tracking-wide text-accent">
+          [{n}]{" "}
+          {isQuran && s.surah && s.ayah ? (
+            <Link
+              href={`/quran/${s.surah}?page=${Math.ceil(s.ayah / 40)}#a${s.ayah}`}
+              className="underline decoration-primary/40 underline-offset-2 hover:text-link"
+              title="Open this verse in the Quran reader"
+            >
+              Quran {s.reference}
+              {s.surah_name ? `, ${s.surah_name}` : ""}
+            </Link>
+          ) : !isQuran && s.collection ? (
+            <Link
+              href={`/hadith/${s.collection}`}
+              className="underline decoration-primary/40 underline-offset-2 hover:text-link"
+              title="Open this collection"
+            >
+              {s.reference}
+            </Link>
+          ) : isQuran ? (
+            `Quran ${s.reference}${s.surah_name ? `, ${s.surah_name}` : ""}`
+          ) : (
+            s.reference
+          )}
+        </p>
+        {isQuran && s.revelation_place && (
+          <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted/70">
+            {s.revelation_place}
+          </span>
+        )}
+        {!isQuran &&
+          (s.gradings ?? []).slice(0, 2).map((g, i) => (
+            <span
+              key={i}
+              className={`rounded-full px-2 py-0.5 text-[10px] ${gradeTone(g.grade)}`}
+              title={g.name ? `Graded by ${g.name}` : undefined}
+            >
+              {g.grade}
+              {g.name ? ` · ${g.name}` : ""}
+            </span>
+          ))}
+      </div>
+      {!isQuran && s.narrator && (
+        <p className="mt-1.5 text-[11px] text-muted/70">Narrator: {s.narrator}</p>
+      )}
+      <p className="mt-2 text-sm leading-relaxed text-text/90">
         {isQuran ? s.translation : s.english}
       </p>
+      {isQuran && s.translation_source && (
+        <p className="mt-1 text-[11px] text-muted/60">Translation: {s.translation_source}</p>
+      )}
       {s.arabic && (
-        <p lang="ar" className="mt-2 text-right text-lg leading-[2] text-snow/80">
+        <p lang="ar" className="mt-2 text-right text-lg leading-[2] text-text/80">
           {s.arabic}
         </p>
       )}
+      {!isQuran && s.isnad && (
+        <details className="group mt-3 border-t border-border pt-2">
+          <summary className="cursor-pointer list-none text-[11px] tracking-wide text-accent hover:text-link">
+            <span className="group-open:hidden">Chain of narration (isnad)</span>
+            <span className="hidden group-open:inline">Hide chain</span>
+          </summary>
+          <p lang="ar" className="mt-2 text-right text-sm leading-[2] text-text/70">
+            {s.isnad}
+          </p>
+        </details>
+      )}
+      {isQuran && s.context && (
+        <details className="group mt-3 border-t border-border pt-2">
+          <summary className="cursor-pointer list-none text-[11px] tracking-wide text-accent hover:text-link">
+            <span className="group-open:hidden">
+              Occasion of revelation{s.context_source ? ` · ${s.context_source}` : ""}
+            </span>
+            <span className="hidden group-open:inline">Hide occasion of revelation</span>
+          </summary>
+          <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-text/70">
+            {s.context}
+          </p>
+        </details>
+      )}
+      {isQuran && s.tafsir && (
+        <details className="group mt-3 border-t border-border pt-2">
+          <summary className="cursor-pointer list-none text-[11px] tracking-wide text-accent hover:text-link">
+            <span className="group-open:hidden">
+              Tafsir{s.tafsir_source ? ` · ${s.tafsir_source}` : ""}
+            </span>
+            <span className="hidden group-open:inline">Hide tafsir</span>
+          </summary>
+          <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-text/70">
+            {s.tafsir}
+          </p>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function ThinkingLoader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-primary/25 bg-surface/50 px-4 py-3.5">
+      {/* pulsing primary mark — radar-style ping */}
+      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/30" />
+        <span className="relative h-2.5 w-2.5 rounded-full bg-primary" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-accent">{label}</p>
+        <div className="mt-2 space-y-1.5" aria-hidden="true">
+          <div className="h-2.5 w-11/12 animate-pulse rounded bg-muted/15" />
+          <div className="h-2.5 w-3/4 animate-pulse rounded bg-muted/15 [animation-delay:200ms]" />
+        </div>
+      </div>
     </div>
   );
 }
 
 function AssistantMessage({ msg }: { msg: ChatMessage }) {
   const sources = msg.sources ?? [];
+  if (!msg.content) {
+    const label = sources.length
+      ? `Reflecting on ${sources.length} source${sources.length === 1 ? "" : "s"}…`
+      : "Searching the Qur’an & Hadith…";
+    return <ThinkingLoader label={label} />;
+  }
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-lg bg-paper text-paperink shadow-[0_1px_0_rgba(198,165,72,0.55),0_10px_28px_rgba(0,0,0,0.35)]">
-        <div className="h-px bg-gradient-to-r from-transparent via-gold to-transparent" />
+      <div className="overflow-hidden rounded-lg bg-elevated text-text shadow-lift">
+        <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
         <div className="p-5 sm:p-6">
           {msg.category && (
-            <p className="mb-4 inline-block rounded-full border border-gold/40 px-3 py-0.5 text-xs tracking-wide text-[#8a6d1f]">
+            <p className="mb-4 inline-block rounded-full border border-primary/40 px-3 py-0.5 text-xs tracking-wide text-accent">
               {CATEGORY_LABEL[msg.category]}
             </p>
           )}
-          <AnswerBody text={msg.content || "…"} />
+          <AnswerBody text={msg.content} />
           {msg.disclaimer && (
-            <p className="mt-6 border-t border-paperline pt-3 text-xs text-paperfaint">
+            <p className="mt-6 border-t border-border pt-3 text-xs text-muted">
               {msg.disclaimer}
             </p>
           )}
@@ -111,7 +329,7 @@ function AssistantMessage({ msg }: { msg: ChatMessage }) {
       </div>
       {sources.length > 0 && (
         <details className="group">
-          <summary className="cursor-pointer list-none text-xs tracking-wide text-goldsoft hover:text-gold">
+          <summary className="cursor-pointer list-none text-xs tracking-wide text-accent hover:text-link">
             <span className="group-open:hidden">Show sources ({sources.length})</span>
             <span className="hidden group-open:inline">Hide sources</span>
           </summary>
@@ -126,6 +344,15 @@ function AssistantMessage({ msg }: { msg: ChatMessage }) {
   );
 }
 
+const EFFORTS = ["minimal", "low", "medium", "high"] as const;
+type Effort = (typeof EFFORTS)[number];
+const EFFORT_HINT: Record<Effort, string> = {
+  minimal: "fastest, answers can be brief",
+  low: "fast, fully cited (recommended)",
+  medium: "deeper, slower",
+  high: "deepest, slowest",
+};
+
 export default function HomePage() {
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
@@ -134,6 +361,19 @@ export default function HomePage() {
   const [conversationId, setConversationId] = useState<number | null>(null);
 
   const [persona, setPersona] = useState<PersonaKey | null>(null);
+  const [effort, setEffort] = useState<Effort>("low");
+  const [effortOpen, setEffortOpen] = useState(false);
+  const effortRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!effortOpen) return;
+    const onDown = (ev: MouseEvent) => {
+      if (effortRef.current && !effortRef.current.contains(ev.target as Node)) {
+        setEffortOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [effortOpen]);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [recent, setRecent] = useState<ConversationSummary[]>([]);
@@ -222,6 +462,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({
           question: trimmed,
+          effort,
           ...(persona ? { persona } : {}),
           ...(conversationId ? { conversation_id: conversationId } : {}),
         }),
@@ -297,24 +538,25 @@ export default function HomePage() {
         />
       )}
 
+      {!threadActive && <LandingPage />}
+
       {!threadActive && (
         <>
-          <section className="pt-6 pb-8 text-center">
-            <p lang="ar" className="text-3xl text-goldsoft/90">
+          <section id="ask" className="scroll-mt-8 border-t border-border pt-14 pb-8 text-center">
+            <p lang="ar" className="text-3xl text-accent/90">
               بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
             </p>
-            <h1 className="font-display mt-5 text-4xl text-snow sm:text-5xl">
+            <h1 className="font-semibold tracking-tight mt-5 text-4xl text-text sm:text-5xl">
               Ask, with sources.
             </h1>
-            <p className="mx-auto mt-3 max-w-xl text-mist">
-              FaithBrains is your companion for learning Islam — ask anything, follow up
-              freely, and every answer is built only from the Quran and authentic hadith,
-              each claim cited.
+            <p className="mx-auto mt-3 max-w-xl text-muted">
+              Ask anything. Answers come only from the Quran and authentic hadith, with
+              every claim cited.
             </p>
           </section>
 
           <div className="mb-6">
-            <p className="mb-2 text-center text-xs tracking-wide text-mist/70">
+            <p className="mb-2 text-center text-xs tracking-wide text-muted/70">
               I&apos;m learning as…
             </p>
             <div className="flex flex-wrap justify-center gap-2">
@@ -328,8 +570,8 @@ export default function HomePage() {
                     onClick={() => choosePersona(active ? null : (p.key as PersonaKey))}
                     className={
                       active
-                        ? "rounded-full border border-gold/60 bg-raise px-3.5 py-1.5 text-xs text-goldsoft"
-                        : "rounded-full border border-line px-3.5 py-1.5 text-xs text-mist hover:border-gold/60 hover:text-goldsoft"
+                        ? "rounded-full border border-primary/60 bg-elevated px-3.5 py-1.5 text-xs text-accent"
+                        : "rounded-full border border-border px-3.5 py-1.5 text-xs text-muted hover:border-primary/60 hover:text-accent"
                     }
                   >
                     {p.label}
@@ -342,18 +584,18 @@ export default function HomePage() {
           {continuePath && (
             <Link
               href={`/learn/${continuePath.key}`}
-              className="mb-6 block rounded-lg border border-line bg-lapis p-4 transition-colors hover:border-gold/50 hover:bg-raise"
+              className="mb-6 block rounded-lg border border-border bg-surface p-4 transition-colors hover:border-primary/50 hover:bg-elevated"
             >
-              <p className="text-xs tracking-wide text-goldsoft">Continue learning</p>
+              <p className="text-xs tracking-wide text-accent">Continue learning</p>
               <div className="mt-1 flex items-center justify-between gap-4">
-                <span className="font-display text-snow">{continuePath.title}</span>
-                <span className="shrink-0 text-xs text-mist">
+                <span className="font-semibold tracking-tight text-text">{continuePath.title}</span>
+                <span className="shrink-0 text-xs text-muted">
                   {continuePath.completed_count}/{continuePath.step_count} studied
                 </span>
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-bg">
                 <div
-                  className="h-full rounded-full bg-gold"
+                  className="h-full rounded-full bg-primary"
                   style={{
                     width: `${Math.round((continuePath.completed_count / continuePath.step_count) * 100)}%`,
                   }}
@@ -366,13 +608,13 @@ export default function HomePage() {
 
       {threadActive && (
         <div className="flex items-center justify-between pt-4 pb-4">
-          <span className="text-xs text-mist/80">
+          <span className="text-xs text-muted/80">
             {activePersona ? `Learning as ${activePersona.label}` : "FaithBrains"}
           </span>
           <button
             type="button"
             onClick={newConversation}
-            className="rounded-full border border-line px-3.5 py-1.5 text-xs text-mist hover:border-gold/60 hover:text-goldsoft"
+            className="rounded-full border border-border px-3.5 py-1.5 text-xs text-muted hover:border-primary/60 hover:text-accent"
           >
             New conversation
           </button>
@@ -384,7 +626,7 @@ export default function HomePage() {
           {messages.map((m, i) =>
             m.role === "user" ? (
               <div key={i} className="flex justify-end">
-                <p className="max-w-[85%] rounded-2xl rounded-br-sm border border-line bg-raise px-4 py-2.5 text-sm text-snow">
+                <p className="max-w-[85%] rounded-2xl rounded-br-sm border border-border bg-elevated px-4 py-2.5 text-sm text-text">
                   {m.content}
                 </p>
               </div>
@@ -401,7 +643,7 @@ export default function HomePage() {
           e.preventDefault();
           submit(question);
         }}
-        className="rounded-xl border border-line bg-lapis p-3"
+        className="rounded-xl border border-border bg-surface p-3"
       >
         <textarea
           value={question}
@@ -418,34 +660,95 @@ export default function HomePage() {
               ? "Ask a follow-up…"
               : "e.g. What does the Quran teach about patience in hardship?"
           }
-          className="w-full resize-none bg-transparent px-2 py-1.5 text-snow placeholder:text-mist/60 focus:outline-none"
+          className="w-full resize-none bg-transparent px-2 py-1.5 text-text placeholder:text-muted/60 focus:outline-none"
         />
-        <div className="flex items-center justify-between px-2 pb-1">
-          <span className="text-xs text-mist/70">Educational answers — never rulings.</span>
-          <button
-            type="submit"
-            disabled={busy || question.trim().length < 3}
-            className="rounded-full bg-gold px-5 py-1.5 text-sm font-bold text-ink transition-opacity disabled:opacity-40"
-          >
-            {busy ? "Consulting sources…" : threadActive ? "Send" : "Ask"}
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted/70">Speed</span>
+            <div className="relative" ref={effortRef}>
+              <button
+                type="button"
+                onClick={() => setEffortOpen((o) => !o)}
+                aria-haspopup="listbox"
+                aria-expanded={effortOpen}
+                className="flex items-center gap-1.5 rounded-full border border-border bg-bg px-3 py-1 text-xs text-text transition-colors hover:border-primary/60"
+              >
+                <span className="capitalize">{effort}</span>
+                <svg
+                  className={`h-3 w-3 text-muted transition-transform ${effortOpen ? "rotate-180" : ""}`}
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 4.5 6 7.5 9 4.5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              {effortOpen && (
+                <ul
+                  role="listbox"
+                  className="absolute top-full left-0 z-30 mt-1.5 w-60 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-xl shadow-black/60"
+                >
+                  {EFFORTS.map((e) => (
+                    <li key={e}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={effort === e}
+                        onClick={() => {
+                          setEffort(e);
+                          setEffortOpen(false);
+                        }}
+                        className={`flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left transition-colors ${
+                          effort === e
+                            ? "bg-elevated text-accent"
+                            : "text-muted hover:bg-elevated hover:text-text"
+                        }`}
+                      >
+                        <span className="text-xs capitalize">{e}</span>
+                        <span className="text-[10px] text-muted/50">{EFFORT_HINT[e]}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <MicButton
+              onText={(t) => setQuestion((q) => (q ? q.trimEnd() + " " : "") + t)}
+              onError={(m) => setError(m || null)}
+            />
+            <button
+              type="submit"
+              disabled={busy || question.trim().length < 3}
+              className="rounded-full bg-primary px-5 py-1.5 text-sm font-bold text-on-primary transition-opacity disabled:opacity-40"
+            >
+              {busy ? "Consulting sources…" : threadActive ? "Send" : "Ask"}
+            </button>
+          </div>
         </div>
       </form>
 
       {error && (
-        <div className="mt-4 rounded-lg border border-[#6b3d33] bg-[#3a2320] p-4 text-sm text-[#f4ddd6]">
+        <div className="mt-4 rounded-lg border border-error/40 bg-error/10 p-4 text-sm text-error">
           {error}
         </div>
       )}
 
       {!threadActive && (
         <div className="mt-5 flex flex-wrap justify-center gap-2">
-          {suggestions.map((s) => (
+          {suggestions.slice(0, 3).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => submit(s)}
-              className="rounded-full border border-line px-3.5 py-1.5 text-xs text-mist hover:border-gold/60 hover:text-goldsoft"
+              className="rounded-full border border-border px-3.5 py-1.5 text-xs text-muted hover:border-primary/60 hover:text-accent"
             >
               {s}
             </button>
@@ -455,17 +758,17 @@ export default function HomePage() {
 
       {!threadActive && recent.length > 0 && (
         <section className="mt-10">
-          <h2 className="font-display mb-3 text-lg text-goldsoft">Recent conversations</h2>
+          <h2 className="font-semibold tracking-tight mb-3 text-lg text-accent">Recent conversations</h2>
           <div className="space-y-2">
             {recent.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => loadConversation(c.id)}
-                className="block w-full rounded-lg border border-line bg-lapis px-4 py-3 text-left transition-colors hover:border-gold/50 hover:bg-raise"
+                className="block w-full rounded-lg border border-border bg-surface px-4 py-3 text-left transition-colors hover:border-primary/50 hover:bg-elevated"
               >
-                <span className="block truncate text-sm text-snow">{c.title}</span>
-                <span className="mt-0.5 block text-xs text-mist/70">
+                <span className="block truncate text-sm text-text">{c.title}</span>
+                <span className="mt-0.5 block text-xs text-muted/70">
                   {Math.floor(c.message_count / 2)}{" "}
                   {c.message_count >= 4 ? "exchanges" : "exchange"}
                 </span>

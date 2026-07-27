@@ -28,10 +28,10 @@ type AskLog = {
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-line bg-lapis p-4">
-      <p className="text-xs tracking-wide text-mist">{label}</p>
-      <p className="font-display mt-1 text-2xl text-goldsoft">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-mist">{sub}</p>}
+    <div className="rounded-lg border border-border bg-surface p-4">
+      <p className="text-xs tracking-wide text-muted">{label}</p>
+      <p className="font-semibold tracking-tight mt-1 text-2xl text-accent">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
     </div>
   );
 }
@@ -73,7 +73,7 @@ export default function AdminPage() {
   if (!authed) {
     return (
       <div className="mx-auto max-w-sm pt-16">
-        <h1 className="font-display mb-4 text-center text-2xl text-snow">Admin</h1>
+        <h1 className="font-semibold tracking-tight mb-4 text-center text-2xl text-text">Admin</h1>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -86,12 +86,12 @@ export default function AdminPage() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="ADMIN_TOKEN from .env"
-            className="w-full rounded-lg border border-line bg-lapis px-4 py-2.5 text-snow placeholder:text-mist/60"
+            className="w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-text placeholder:text-muted/60"
           />
-          <button type="submit" className="w-full rounded-lg bg-gold py-2.5 text-sm font-bold text-ink">
+          <button type="submit" className="w-full rounded-lg bg-primary py-2.5 text-sm font-bold text-on-primary">
             Open dashboard
           </button>
-          {error && <p className="text-center text-sm text-[#e8a9a0]">{error}</p>}
+          {error && <p className="text-center text-sm text-error">{error}</p>}
         </form>
       </div>
     );
@@ -99,7 +99,7 @@ export default function AdminPage() {
 
   return (
     <div>
-      <h1 className="font-display mb-6 text-3xl text-snow">Admin</h1>
+      <h1 className="font-semibold tracking-tight mb-6 text-3xl text-text">Admin</h1>
 
       {stats && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -119,7 +119,7 @@ export default function AdminPage() {
           <Tile label="Errors" value={stats.asks_errored.toLocaleString()} />
           <Tile
             label="Avg answer time"
-            value={stats.avg_latency_ms ? `${(stats.avg_latency_ms / 1000).toFixed(1)}s` : "—"}
+            value={stats.avg_latency_ms ? `${(stats.avg_latency_ms / 1000).toFixed(1)}s` : "-"}
           />
           <Tile
             label="By category"
@@ -131,24 +131,24 @@ export default function AdminPage() {
         </div>
       )}
 
-      <h2 className="font-display mt-10 mb-3 text-lg text-goldsoft">Recent questions</h2>
+      <h2 className="font-semibold tracking-tight mt-10 mb-3 text-lg text-accent">Recent questions</h2>
       <div className="space-y-3">
-        {asks.length === 0 && <p className="text-sm text-mist">No questions logged yet.</p>}
+        {asks.length === 0 && <p className="text-sm text-muted">No questions logged yet.</p>}
         {asks.map((a) => (
-          <details key={a.id} className="rounded-lg border border-line bg-lapis p-4">
-            <summary className="cursor-pointer text-sm text-snow">
-              <span className={a.status === "error" ? "text-[#e8a9a0]" : "text-goldsoft"}>
+          <details key={a.id} className="rounded-lg border border-border bg-surface p-4">
+            <summary className="cursor-pointer text-sm text-text">
+              <span className={a.status === "error" ? "text-error" : "text-accent"}>
                 [{a.status === "error" ? "error" : a.category}]
               </span>{" "}
               {a.question}
-              <span className="float-right text-xs text-mist">
+              <span className="float-right text-xs text-muted">
                 {new Date(a.created_at).toLocaleString()} ·{" "}
-                {a.latency_ms != null ? `${(a.latency_ms / 1000).toFixed(1)}s` : "—"}
+                {a.latency_ms != null ? `${(a.latency_ms / 1000).toFixed(1)}s` : "-"}
               </span>
             </summary>
-            <div className="mt-3 border-t border-line pt-3 text-sm leading-relaxed text-snow/85">
-              {a.error ? <p className="text-[#e8a9a0]">{a.error}</p> : <p>{a.answer}</p>}
-              <p className="mt-2 text-xs text-mist">
+            <div className="mt-3 border-t border-border pt-3 text-sm leading-relaxed text-text/85">
+              {a.error ? <p className="text-error">{a.error}</p> : <p>{a.answer}</p>}
+              <p className="mt-2 text-xs text-muted">
                 {a.provider} · {a.model}
               </p>
             </div>

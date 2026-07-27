@@ -71,11 +71,19 @@ export type SearchResult = {
   surah_name_arabic?: string | null;
   arabic?: string | null;
   translation?: string | null;
+  translation_source?: string | null;
+  revelation_place?: string | null;
+  tafsir?: string | null;
+  tafsir_source?: string | null;
+  context?: string | null;
+  context_source?: string | null;
   collection?: string | null;
   collection_name?: string | null;
   number?: string | null;
   english?: string | null;
   gradings?: Grading[] | null;
+  narrator?: string | null;
+  isnad?: string | null;
 };
 
 export type SearchResponse = {

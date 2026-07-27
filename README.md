@@ -78,7 +78,9 @@ curl -X POST http://localhost:8000/api/v1/ask `
 - `GET /api/v1/admin/stats` and `GET /api/v1/admin/asks` require the `X-Admin-Token` header
   matching `ADMIN_TOKEN` in `.env`; admin is disabled while the token is unset/default.
   Frontend dashboard: `http://localhost:3000/admin`.
-- Rate limits (per IP, in-memory): `/ask` 15/min, `/search` 60/min — swap for Redis when scaling out.
+- Rate limits (per IP, Postgres-backed — shared across workers, survive restarts): `/ask` 15/min,
+  `/search` 60/min. Falls back to in-memory if the DB is unreachable. The semantic answer cache is
+  Postgres-backed too (pgvector, `semantic_cache` table).
 - Security headers on all responses (nosniff, frame-deny, referrer policy).
 
 ## Tests

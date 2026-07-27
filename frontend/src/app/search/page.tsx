@@ -2,7 +2,7 @@ import HadithCard from "@/components/HadithCard";
 import VerseCard from "@/components/VerseCard";
 import { api } from "@/lib/api";
 
-export const metadata = { title: "Search — FaithBrains" };
+export const metadata = { title: "Search · FaithBrains" };
 
 export default async function SearchPage({
   searchParams,
@@ -21,24 +21,24 @@ export default async function SearchPage({
           type="search"
           name="q"
           defaultValue={query}
-          placeholder="Search — a topic, a phrase, 2:255, bukhari 6018, or Arabic"
-          className="w-full rounded-full border border-line bg-lapis px-5 py-2.5 text-snow placeholder:text-mist/60"
+          placeholder="Search a topic, a phrase, 2:255, bukhari 6018, or Arabic"
+          className="w-full rounded-full border border-border bg-surface px-5 py-2.5 text-text placeholder:text-muted/60"
         />
-        <button type="submit" className="rounded-full bg-gold px-6 text-sm font-bold text-ink">
+        <button type="submit" className="rounded-full bg-primary px-6 text-sm font-bold text-on-primary">
           Search
         </button>
       </form>
 
       {outcome && (
         <>
-          <p className="mb-5 text-xs text-mist">
+          <p className="mb-5 text-xs text-muted">
             {outcome.results.length} results · matched by{" "}
             {outcome.mode === "reference" ? "exact reference" : outcome.signals_used.join(" + ")}
           </p>
           {outcome.results.length === 0 && (
-            <div className="rounded-lg border border-line bg-lapis p-6 text-center text-mist">
+            <div className="rounded-lg border border-border bg-surface p-6 text-center text-muted">
               Nothing matched. Try different words, an exact reference like{" "}
-              <span className="text-goldsoft">2:255</span>, or Arabic.
+              <span className="text-accent">2:255</span>, or Arabic.
             </div>
           )}
           <div className="space-y-4">
@@ -70,8 +70,8 @@ export default async function SearchPage({
       )}
 
       {!query && (
-        <p className="text-center text-sm text-mist">
-          Search across 6,236 verses and 36,512 hadith — by meaning, phrase, reference, or Arabic
+        <p className="text-center text-sm text-muted">
+          Search across 6,236 verses and 36,512 hadith by meaning, phrase, reference, or Arabic
           text.
         </p>
       )}

@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +13,7 @@ from app.ai.answer import HISTORY_TURNS, AnswerService
 from app.ai.base import AIUnavailable
 from app.api import schemas
 from app.api.learner_routes import get_learner_optional
-from app.api.ratelimit import limit_ask, limit_search
+from app.api.ratelimit import limit_ask, limit_search, limit_transcribe
 from app.config import get_settings
 from app.db.engine import get_session
 from app.db.models import (
@@ -53,6 +53,39 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict:
         "hadiths": hadith_count,
         "quran_embeddings": embedded,
     }
+
+
+_MAX_AUDIO_BYTES = 15 * 1024 * 1024  # ~1 minute of opus is far below this
+
+
+@router.post("/transcribe", dependencies=[Depends(limit_transcribe)])
+async def transcribe(audio: UploadFile = File(...)) -> dict:
+    """Voice input: turn a short recording into text for the ask box.
+
+    Speech-to-text only. The transcript is returned for the user to review
+    and submit; nothing is auto-answered from here.
+    """
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(503, "Voice input is not configured on this server.")
+    data = await audio.read()
+    if not data:
+        raise HTTPException(400, "Empty recording.")
+    if len(data) > _MAX_AUDIO_BYTES:
+        raise HTTPException(413, "Recording too long. Keep it under a minute.")
+
+    from openai import AsyncOpenAI, OpenAIError
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    try:
+        result = await client.audio.transcriptions.create(
+            model=settings.openai_transcribe_model,
+            file=(audio.filename or "voice.webm", data, audio.content_type or "audio/webm"),
+        )
+    except OpenAIError as exc:
+        log.warning("transcription failed: %s", exc)
+        raise HTTPException(502, "Could not transcribe the recording. Try again.") from exc
+    return {"text": (result.text or "").strip()}
 
 
 @router.get("/editions", response_model=list[schemas.EditionOut])
@@ -337,7 +370,12 @@ async def ask(
     conversation, history = await _conversation_history(session, learner, body)
     try:
         outcome = await answer_service.ask(
-            session, body.question, scope=body.scope, persona=body.persona, history=history
+            session,
+            body.question,
+            scope=body.scope,
+            persona=body.persona,
+            history=history,
+            effort=body.effort,
         )
     except AIUnavailable as exc:
         session.add(
@@ -400,7 +438,12 @@ async def ask_stream(
         outcome: dict | None = None
         try:
             async for event in answer_service.ask_stream(
-                session, body.question, scope=body.scope, persona=body.persona, history=history
+                session,
+                body.question,
+                scope=body.scope,
+                persona=body.persona,
+                history=history,
+                effort=body.effort,
             ):
                 if event.get("event") == "done":
                     outcome = event  # held back: persisted first, then emitted below

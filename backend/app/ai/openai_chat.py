@@ -68,7 +68,7 @@ class OpenAIChat:
     ) -> str:
         kwargs: dict = {}
         # reasoning_effort applies to reasoning models (gpt-5 family / o-series)
-        if effort in ("low", "medium", "high") and (
+        if effort in ("minimal", "low", "medium", "high") and (
             model.startswith("gpt-5") or model.startswith("o")
         ):
             kwargs["reasoning_effort"] = effort
@@ -88,7 +88,7 @@ class OpenAIChat:
     ):
         """Yields content deltas as they arrive."""
         kwargs: dict = {}
-        if effort in ("low", "medium", "high") and (
+        if effort in ("minimal", "low", "medium", "high") and (
             model.startswith("gpt-5") or model.startswith("o")
         ):
             kwargs["reasoning_effort"] = effort

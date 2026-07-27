@@ -29,7 +29,7 @@ const FALLBACK: Persona[] = [
   {
     key: "new_muslim",
     label: "New Muslim",
-    tagline: "A gentle, accurate introduction — one step at a time.",
+    tagline: "A gentle, accurate introduction, one step at a time.",
     suggested_questions: [],
     recommended_paths: [],
   },
@@ -44,15 +44,15 @@ export default function PersonaOnboarding({
 }) {
   const list = personas.length === 4 ? personas : FALLBACK;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/85 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-xl border border-line bg-lapis p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)] sm:p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/85 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-lift sm:p-8">
         <div className="text-center">
-          <p lang="ar" className="text-2xl text-goldsoft/90">
+          <p lang="ar" className="text-2xl text-accent/90">
             السَّلَامُ عَلَيْكُمْ
           </p>
-          <h2 className="font-display mt-3 text-2xl text-snow">Welcome to FaithBrains</h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-mist">
-            A study companion grounded in the Quran and authentic hadith — every answer
+          <h2 className="font-semibold tracking-tight mt-3 text-2xl text-text">Welcome to FaithBrains</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
+            A study companion grounded in the Quran and authentic hadith, with every answer
             cited. Choose how you&apos;d like to learn:
           </p>
         </div>
@@ -62,10 +62,10 @@ export default function PersonaOnboarding({
               key={p.key}
               type="button"
               onClick={() => onDone(p.key as PersonaKey)}
-              className="rounded-lg border border-line bg-ink/40 p-4 text-left transition-colors hover:border-gold/60 hover:bg-raise"
+              className="rounded-lg border border-border bg-bg/40 p-4 text-left transition-colors hover:border-primary/60 hover:bg-elevated"
             >
-              <span className="font-display block text-base text-snow">{p.label}</span>
-              <span className="mt-1 block text-xs leading-relaxed text-mist">{p.tagline}</span>
+              <span className="font-semibold tracking-tight block text-base text-text">{p.label}</span>
+              <span className="mt-1 block text-xs leading-relaxed text-muted">{p.tagline}</span>
             </button>
           ))}
         </div>
@@ -73,9 +73,9 @@ export default function PersonaOnboarding({
           <button
             type="button"
             onClick={() => onDone(null)}
-            className="text-xs text-mist/80 underline decoration-line underline-offset-4 hover:text-goldsoft"
+            className="text-xs text-muted/80 underline decoration-border underline-offset-4 hover:text-accent"
           >
-            Skip for now — you can choose any time
+            Skip for now. You can choose any time.
           </button>
         </div>
       </div>

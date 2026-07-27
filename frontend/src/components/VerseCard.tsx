@@ -3,7 +3,7 @@ import SaveButton from "@/components/SaveButton";
 import TafsirToggle from "@/components/TafsirToggle";
 import { arabicNumber } from "@/lib/api";
 
-// The signature element: an illuminated verse panel — paper surface, gold hairline,
+// The signature element: an illuminated verse panel — elevated surface, primary hairline,
 // Arabic set right-to-left in Amiri with a mushaf-style ayah medallion.
 export default function VerseCard({
   surah,
@@ -22,21 +22,24 @@ export default function VerseCard({
 }) {
   const reference = `${surah}:${ayah}`;
   return (
-    <article className="overflow-hidden rounded-lg bg-paper text-paperink shadow-[0_1px_0_rgba(198,165,72,0.55),0_10px_28px_rgba(0,0,0,0.35)]">
-      <div className="h-px bg-gradient-to-r from-transparent via-gold to-transparent" />
+    <article
+      id={`a${ayah}`}
+      className="scroll-mt-24 overflow-hidden rounded-lg bg-elevated text-text shadow-lift"
+    >
+      <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
       <div className="p-5 sm:p-6">
         <p lang="ar" className="text-right text-2xl leading-[2.3] sm:text-[1.7rem]">
           {arabic} <span className="medallion align-middle">{arabicNumber(ayah)}</span>
         </p>
         {translation && (
-          <p className="mt-4 border-t border-paperline pt-4 font-serif text-[1.05rem] leading-relaxed text-paperink/90">
+          <p className="mt-4 border-t border-border pt-4 text-[1.05rem] leading-relaxed text-text/90">
             {translation}
           </p>
         )}
-        <div className="mt-4 flex items-center justify-between text-xs text-paperfaint">
+        <div className="mt-4 flex items-center justify-between text-xs text-muted">
           <span className="tracking-wide">
             {linkToSurah ? (
-              <Link href={`/quran/${surah}`} className="underline decoration-gold/50 underline-offset-4 hover:text-paperink">
+              <Link href={`/quran/${surah}`} className="underline decoration-primary/50 underline-offset-4 hover:text-text">
                 {surahName ? `${surahName} · ` : ""}Quran {reference}
               </Link>
             ) : (

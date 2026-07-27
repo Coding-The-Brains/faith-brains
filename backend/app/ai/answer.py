@@ -5,6 +5,7 @@ The model is instructed to answer ONLY from those sources and cite them as [n]; 
 returns the same numbered source list so the frontend can render citations verbatim.
 """
 
+import asyncio
 import logging
 import re
 
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai import guard
 from app.ai.base import ChatProvider
 from app.ai.provider import get_chat_provider
+from app.ai.semantic_cache import get_semantic_cache
 from app.content.personas import PERSONAS_BY_KEY
 from app.retrieval.service import SearchService
 
@@ -20,6 +22,9 @@ log = logging.getLogger(__name__)
 
 SOURCE_COUNT = 8
 MAX_SOURCE_CHARS = 1500  # per-source truncation for long hadith
+TAFSIR_PROMPT_CHARS = 800  # tafsir excerpt fed to the model per verse (kept tight for latency)
+DEFAULT_EFFORT = "low"  # answer-model reasoning effort when the caller doesn't pick one
+ALLOWED_EFFORTS = ("minimal", "low", "medium", "high")
 HISTORY_TURNS = 6  # most recent turns kept as conversation context
 HISTORY_TURN_CHARS = 1000  # per-turn truncation inside the prompt
 
@@ -30,10 +35,12 @@ Grounding rules (strict):
 - Cite every claim with the source number in square brackets, e.g. [1] or [2][3].
 - If the sources are insufficient to answer, say so plainly and suggest what the user could search for instead. Never fabricate a citation.
 - Quote Quran and Hadith text verbatim when quoting; do not paraphrase inside quotation marks.
+- Hadith sources may carry scholars' gradings. If a hadith you cite is graded Daif/weak or the graders disagree, say so explicitly (e.g. "this narration is graded weak by al-Albani") and prefer Sahih/Hasan sources when both cover the point. Never present a weak narration as established.
+- Some sources include a Tafsir excerpt (classical scholarly commentary), an Occasion-of-revelation note (asbab al-nuzul), and revelation place (Meccan/Medinan). Use these to explain scholarly interpretation and historical context, attributing them in prose (e.g. "Ibn Kathir explains…", "Al-Wahidi reports it was revealed when…") while still citing the source number. Prefer the tafsir's interpretation over your own reasoning.
 
 Religious-authority rules (strict):
 - You are not a mufti and must never issue a fatwa, personal ruling, or verdict on a person's specific situation.
-- Where scholars differ, present the difference neutrally rather than picking a side.
+- Where scholars differ, present the difference neutrally rather than picking a side. When a tafsir notes more than one recognized interpretation, mention them.
 - For anything touching a personal circumstance, explain the general teaching from the sources and direct the user to a qualified scholar for their specific case.
 
 Style:
@@ -94,6 +101,7 @@ class AnswerService:
     def __init__(self, chat: ChatProvider | None = None, search: SearchService | None = None):
         self.chat = chat or get_chat_provider()
         self.search = search or SearchService()
+        self.cache = get_semantic_cache()
 
     async def ask(
         self,
@@ -102,16 +110,33 @@ class AnswerService:
         scope: str = "all",
         persona: str | None = None,
         history: list[dict] | None = None,
+        effort: str = DEFAULT_EFFORT,
     ) -> dict:
         standalone = await self._condense(question, history)
-        classification = await guard.classify(standalone, self.chat)
+        # Semantic cache: a near-identical question returns instantly (skips retrieval +
+        # generation). Only single-turn, default-persona asks are cacheable — otherwise the
+        # answer depends on history/persona and must not be shared across sessions.
+        q_embedding = await self._cache_key(standalone, persona, history, effort)
+        if q_embedding is not None:
+            cached = await self.cache.get(q_embedding)
+            if cached is not None:
+                return cached
+
+        # Classification (LLM) and retrieval (DB+embeddings) are independent — both only
+        # need `standalone` — so run them concurrently instead of back-to-back. Reuse the
+        # cache-lookup embedding for retrieval so a miss doesn't call Voyage twice.
+        classification, retrieval = await asyncio.gather(
+            guard.classify(standalone, self.chat),
+            self.search.search(
+                session, standalone, scope=scope, k=SOURCE_COUNT, query_embedding=q_embedding
+            ),
+        )
 
         if classification.category == "sensitive_crisis":
             return self._respond(classification, guard.CRISIS_RESPONSE, [])
         if classification.category == "out_of_scope":
             return self._respond(classification, guard.OUT_OF_SCOPE_RESPONSE, [])
 
-        retrieval = await self.search.search(session, standalone, scope=scope, k=SOURCE_COUNT)
         sources = retrieval["results"]
         if not sources:
             return self._respond(classification, _NO_SOURCES_MESSAGE, [])
@@ -126,9 +151,15 @@ class AnswerService:
             system=system,
             user=self._build_prompt(question, sources, history),
             max_tokens=8000,
-            effort="medium",
+            # Caller-selected reasoning effort (default "low"). Grounded synthesis of
+            # retrieved sources needs little reasoning — safety is handled upstream by the
+            # classifier. minimal=fastest/thinner, low=fast+cited, medium/high=deeper+slower.
+            effort=effort,
         )
-        return self._respond(classification, answer.strip(), sources)
+        payload = self._respond(classification, answer.strip(), sources)
+        if q_embedding is not None:
+            await self.cache.put(q_embedding, payload)
+        return payload
 
     async def ask_stream(
         self,
@@ -137,13 +168,32 @@ class AnswerService:
         scope: str = "all",
         persona: str | None = None,
         history: list[dict] | None = None,
+        effort: str = DEFAULT_EFFORT,
     ):
         """Same flow as ask(), but yields event dicts as work completes:
         {"event": "meta"} -> {"event": "sources"} -> {"event": "delta"}* -> {"event": "done"}.
         The done event carries the full ask() payload so callers can log it identically.
         Deterministic lanes (crisis / out-of-scope / no sources) skip straight to done."""
         standalone = await self._condense(question, history)
-        classification = await guard.classify(standalone, self.chat)
+        # Semantic cache hit: replay the stored answer as one delta so the UI renders it
+        # identically, then done. Skips retrieval + generation (see ask()).
+        q_embedding = await self._cache_key(standalone, persona, history, effort)
+        if q_embedding is not None:
+            cached = await self.cache.get(q_embedding)
+            if cached is not None:
+                yield {"event": "meta", "category": cached["category"]}
+                yield {"event": "sources", "sources": cached["sources"]}
+                yield {"event": "delta", "text": cached["answer"]}
+                yield {"event": "done", **cached}
+                return
+
+        # Classify and retrieve concurrently (see ask()); first token arrives sooner.
+        classification, retrieval = await asyncio.gather(
+            guard.classify(standalone, self.chat),
+            self.search.search(
+                session, standalone, scope=scope, k=SOURCE_COUNT, query_embedding=q_embedding
+            ),
+        )
         yield {"event": "meta", "category": classification.category}
 
         if classification.category == "sensitive_crisis":
@@ -153,7 +203,6 @@ class AnswerService:
             yield {"event": "done", **self._respond(classification, guard.OUT_OF_SCOPE_RESPONSE, [])}
             return
 
-        retrieval = await self.search.search(session, standalone, scope=scope, k=SOURCE_COUNT)
         sources = retrieval["results"]
         if not sources:
             yield {"event": "done", **self._respond(classification, _NO_SOURCES_MESSAGE, [])}
@@ -172,12 +221,25 @@ class AnswerService:
             system=system,
             user=self._build_prompt(question, sources, history),
             max_tokens=8000,
-            effort="medium",
+            effort=effort,  # caller-selected; see ask()
         ):
             parts.append(delta)
             yield {"event": "delta", "text": delta}
 
-        yield {"event": "done", **self._respond(classification, "".join(parts).strip(), sources)}
+        payload = self._respond(classification, "".join(parts).strip(), sources)
+        if q_embedding is not None:
+            await self.cache.put(q_embedding, payload)
+        yield {"event": "done", **payload}
+
+    async def _cache_key(
+        self, standalone: str, persona: str | None, history: list[dict] | None, effort: str
+    ) -> list[float] | None:
+        """Embedding used as the semantic-cache key, or None when this request must not be
+        cached: persona/multi-turn answers are context-specific, and non-default efforts run
+        fresh so each setting's real latency/quality is visible when testing on the site."""
+        if persona or history or effort != DEFAULT_EFFORT:
+            return None
+        return await self.search.embed_query(standalone)
 
     async def _condense(self, question: str, history: list[dict] | None) -> str:
         """Rewrite a follow-up into a standalone question for classification and
@@ -224,17 +286,35 @@ class AnswerService:
         for i, s in enumerate(sources, start=1):
             if s["type"] == "quran":
                 text = (s.get("translation") or "").strip()[:MAX_SOURCE_CHARS]
+                src = s.get("translation_source") or s.get("translation_edition") or ""
+                place = s.get("revelation_place")
+                place_note = f", {place}" if place else ""
+                trans_note = f" — trans. {src}" if src else ""
                 lines.append(
-                    f"[{i}] Quran {s['reference']} (Surah {s['surah_name']}): "
-                    f"“{text}” (Arabic: {s.get('arabic', '')})"
+                    f"[{i}] Quran {s['reference']} (Surah {s['surah_name']}{place_note}): "
+                    f"“{text}”{trans_note} (Arabic: {s.get('arabic', '')})"
                 )
+                tafsir = (s.get("tafsir") or "").strip()
+                if tafsir:
+                    lines.append(
+                        f"    Tafsir ({s.get('tafsir_source', 'classical commentary')}): "
+                        f"“{tafsir[:TAFSIR_PROMPT_CHARS]}”"
+                    )
+                ctx = (s.get("context") or "").strip()
+                if ctx:
+                    lines.append(
+                        f"    Occasion of revelation ({s.get('context_source', 'asbab al-nuzul')}): "
+                        f"“{ctx[:TAFSIR_PROMPT_CHARS]}”"
+                    )
             else:
                 text = (s.get("english") or "").strip()[:MAX_SOURCE_CHARS]
                 grades = ", ".join(
                     f"{g.get('name')}: {g.get('grade')}" for g in (s.get("gradings") or [])[:2]
                 )
                 grade_note = f" [Grading — {grades}]" if grades else ""
-                lines.append(f"[{i}] {s['reference']}{grade_note}: “{text}”")
+                narrator = s.get("narrator")
+                narrator_note = f" (narrated by {narrator})" if narrator else ""
+                lines.append(f"[{i}] {s['reference']}{narrator_note}{grade_note}: “{text}”")
         lines.append("")
         lines.append(f"Question: {question.strip()}")
         return "\n".join(lines)

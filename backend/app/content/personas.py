@@ -52,7 +52,7 @@ PERSONAS: list[dict] = [
             "Which hadith lists the five pillars of Islam?",
             "What was the first revelation of the Quran?",
         ],
-        "recommended_paths": ["quran-essentials", "salah-basics"],
+        "recommended_paths": ["quran-essentials", "seerah"],
     },
     {
         "key": "educator",
@@ -98,7 +98,7 @@ PERSONAS: list[dict] = [
             "What does the Quran say about Allah's mercy?",
             "What happens during Ramadan?",
         ],
-        "recommended_paths": ["quran-essentials", "salah-basics", "ramadan-fasting"],
+        "recommended_paths": ["new-muslim-intro", "five-pillars", "salah-basics"],
     },
 ]
 

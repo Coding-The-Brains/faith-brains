@@ -1,7 +1,8 @@
 import Link from "next/link";
+import NextUp from "@/components/NextUp";
 import PathList from "@/components/PathList";
 
-export const metadata = { title: "Learn — FaithBrains" };
+export const metadata = { title: "Learn · FaithBrains" };
 
 const TOPICS: { title: string; arabic: string; query: string }[] = [
   { title: "Patience", arabic: "الصبر", query: "patience in hardship" },
@@ -21,14 +22,15 @@ const TOPICS: { title: string; arabic: string; query: string }[] = [
 export default function LearnPage() {
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="font-display mb-2 text-3xl text-snow">Learning paths</h1>
-      <p className="mb-6 text-sm text-mist">
-        Guided journeys through the sources, one step at a time. Your progress is remembered.
+      <h1 className="font-semibold tracking-tight mb-2 text-3xl text-text">Learning paths</h1>
+      <p className="mb-6 text-sm text-muted">
+        Work through the sources one step at a time. Your progress is saved as you go.
       </p>
+      <NextUp />
       <PathList />
 
-      <h2 className="font-display mt-12 mb-2 text-2xl text-snow">Learn by theme</h2>
-      <p className="mb-6 text-sm text-mist">
+      <h2 className="font-semibold tracking-tight mt-12 mb-2 text-2xl text-text">Learn by theme</h2>
+      <p className="mb-6 text-sm text-muted">
         Or start from a theme and read what the Quran and hadith actually say about it.
       </p>
 
@@ -37,19 +39,19 @@ export default function LearnPage() {
           <li key={t.title}>
             <Link
               href={`/search?q=${encodeURIComponent(t.query)}`}
-              className="block rounded-lg border border-line bg-lapis p-4 text-center transition-colors hover:border-gold/50 hover:bg-raise"
+              className="block rounded-lg border border-border bg-surface p-4 text-center transition-colors hover:border-primary/50 hover:bg-elevated"
             >
-              <span lang="ar" className="block text-2xl text-goldsoft">
+              <span lang="ar" className="block text-2xl text-accent">
                 {t.arabic}
               </span>
-              <span className="mt-1 block text-sm text-snow">{t.title}</span>
+              <span className="mt-1 block text-sm text-text">{t.title}</span>
             </Link>
           </li>
         ))}
       </ul>
 
-      <section className="mt-12 rounded-lg border border-line bg-lapis p-6 text-sm leading-relaxed text-mist">
-        <h2 className="font-display mb-3 text-lg text-goldsoft">About FaithBrains</h2>
+      <section className="mt-12 rounded-lg border border-border bg-surface p-6 text-sm leading-relaxed text-muted">
+        <h2 className="font-semibold tracking-tight mb-3 text-lg text-accent">About FaithBrains</h2>
         <p>
           FaithBrains is an educational companion for the Quran and Hadith. Answers on the Ask tab
           are generated strictly from retrieved sources, with every citation shown. It is not a
@@ -57,18 +59,18 @@ export default function LearnPage() {
           presents the difference rather than choosing a side. For personal guidance, please
           consult a qualified scholar.
         </p>
-        <h3 className="mt-5 mb-2 text-snow">Sources &amp; attribution</h3>
+        <h3 className="mt-5 mb-2 text-text">Sources &amp; attribution</h3>
         <ul className="list-disc space-y-1 pl-5">
           <li>
             Quran Arabic text from the{" "}
-            <a href="https://tanzil.net" className="text-goldsoft underline underline-offset-2">
+            <a href="https://tanzil.net" className="text-accent underline underline-offset-2">
               Tanzil Project
             </a>{" "}
             (verbatim, unmodified).
           </li>
           <li>
-            English translations — Saheeh International and Rowwad Translation Center — via{" "}
-            <a href="https://quranenc.com" className="text-goldsoft underline underline-offset-2">
+            English translations, Saheeh International and Rowwad Translation Center, via{" "}
+            <a href="https://quranenc.com" className="text-accent underline underline-offset-2">
               QuranEnc.com
             </a>
             , reproduced verbatim with edition versions preserved.
