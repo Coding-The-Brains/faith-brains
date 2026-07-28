@@ -8,7 +8,7 @@ import logging
 import re
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,17 +42,23 @@ _SESSION_RE = re.compile(r"[A-Za-z0-9-]{8,64}")
 async def get_learner(
     x_session_id: str | None = Header(default=None),
     authorization: str | None = Header(default=None),
+    fb_token: str | None = Cookie(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> Learner:
-    # Signed-in requests resolve to the account's primary learner, so data
-    # follows the account across devices. Stale tokens fall back to anonymous.
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.removeprefix("Bearer ").strip()
+    # Signed-in requests (httpOnly cookie, or Bearer for API clients) resolve to
+    # the account's primary learner, so data follows the account across devices.
+    # Expired/stale tokens fall back to the anonymous session.
+    token = fb_token or (
+        authorization.removeprefix("Bearer ").strip()
+        if authorization and authorization.startswith("Bearer ")
+        else None
+    )
+    if token:
         claimed = (
             await session.execute(
                 select(Learner)
                 .join(AuthToken, AuthToken.user_id == Learner.user_id)
-                .where(AuthToken.token == token)
+                .where(AuthToken.token == token, AuthToken.expires_at > datetime.now(UTC))
                 .order_by(Learner.created_at)
                 .limit(1)
             )
@@ -84,13 +90,14 @@ async def get_learner(
 async def get_learner_optional(
     x_session_id: str | None = Header(default=None),
     authorization: str | None = Header(default=None),
+    fb_token: str | None = Cookie(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> Learner | None:
-    has_token = bool(authorization and authorization.startswith("Bearer "))
+    has_token = bool(fb_token or (authorization and authorization.startswith("Bearer ")))
     if not has_token and (not x_session_id or not _SESSION_RE.fullmatch(x_session_id)):
         return None
     try:
-        return await get_learner(x_session_id, authorization, session)
+        return await get_learner(x_session_id, authorization, fb_token, session)
     except HTTPException:
         return None  # stale token + no session id: treat as signed out
 

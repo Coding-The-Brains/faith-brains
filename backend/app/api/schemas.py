@@ -300,10 +300,5 @@ class AuthIn(BaseModel):
     password: str
 
 
-class AuthOut(BaseModel):
-    token: str
-    email: str
-
-
 class MeOut(BaseModel):
     email: str

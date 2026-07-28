@@ -247,7 +247,9 @@ class User(Base):
 
 
 class AuthToken(Base):
-    """Opaque bearer token, revocable by row delete. No JWT machinery needed."""
+    """Opaque session token, delivered as an httpOnly cookie.
+
+    Revocable by row delete, expiring by default. No JWT machinery needed."""
 
     __tablename__ = "auth_tokens"
 
@@ -255,6 +257,9 @@ class AuthToken(Base):
     user_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.text("now()")
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.text("now() + interval '30 days'")
     )
 
 

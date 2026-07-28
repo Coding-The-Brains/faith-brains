@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { authEmail, authToken, sessionHeaders, setAuth } from "@/lib/session";
+import { rotateSession, sessionHeaders } from "@/lib/session";
 
 type Mode = "signin" | "signup";
 
@@ -12,9 +12,15 @@ export default function AccountPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState<string | null>(null);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    if (authToken()) setSignedIn(authEmail());
+    // The token is an httpOnly cookie, so ask the server who we are
+    fetch("/api/v1/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me) => setSignedIn(me?.email ?? null))
+      .catch(() => {})
+      .finally(() => setChecked(true));
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -33,7 +39,6 @@ export default function AccountPage() {
         setError(body?.detail ?? "Something went wrong. Try again.");
         return;
       }
-      setAuth(body.token, body.email);
       setSignedIn(body.email);
       setPassword("");
     } catch {
@@ -43,12 +48,17 @@ export default function AccountPage() {
     }
   }
 
-  async function signOut() {
-    const headers = sessionHeaders();
-    setAuth(null, null);
+  async function signOut(everywhere: boolean) {
+    try {
+      await fetch(`/api/v1/auth/${everywhere ? "logout-all" : "logout"}`, { method: "POST" });
+    } catch {
+      // cookie may survive a network blip; the UI still resets below
+    }
+    rotateSession(); // fresh anonymous identity so new activity stays out of the account
     setSignedIn(null);
-    fetch("/api/v1/auth/logout", { method: "POST", headers }).catch(() => {});
   }
+
+  if (!checked) return null;
 
   if (signedIn) {
     return (
@@ -60,10 +70,17 @@ export default function AccountPage() {
         </p>
         <button
           type="button"
-          onClick={signOut}
+          onClick={() => signOut(false)}
           className="mt-8 cursor-pointer rounded-full border border-border px-5 py-2 text-sm text-muted transition-colors hover:border-primary hover:text-text"
         >
           Sign out
+        </button>
+        <button
+          type="button"
+          onClick={() => signOut(true)}
+          className="mx-auto mt-4 block cursor-pointer text-xs text-muted hover:text-error"
+        >
+          Sign out on all devices
         </button>
       </div>
     );

@@ -28,46 +28,20 @@ export function sessionId(): string {
   }
 }
 
-const TOKEN_KEY = "faithbrains.token.v1";
-const EMAIL_KEY = "faithbrains.email.v1";
-
-export function authToken(): string | null {
-  if (typeof window === "undefined") return null;
+// Signed-in state lives in an httpOnly cookie set by the backend; page
+// scripts never see the token. The only client-side auth concern is below:
+// after sign-out, mint a FRESH anonymous id so nothing saved while signed
+// out ever lands in the account's learner.
+export function rotateSession(): void {
   try {
-    return window.localStorage.getItem(TOKEN_KEY);
+    window.localStorage.removeItem(KEY);
   } catch {
-    return null;
+    // storage blocked: nothing persisted anyway
   }
-}
-
-export function authEmail(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(EMAIL_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setAuth(token: string | null, email: string | null): void {
-  try {
-    if (token && email) {
-      window.localStorage.setItem(TOKEN_KEY, token);
-      window.localStorage.setItem(EMAIL_KEY, email);
-    } else {
-      window.localStorage.removeItem(TOKEN_KEY);
-      window.localStorage.removeItem(EMAIL_KEY);
-    }
-  } catch {
-    // storage blocked: signed-in state simply does not persist
-  }
+  sessionId(); // eagerly mint the replacement
 }
 
 export function sessionHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
   const id = sessionId();
-  if (id) headers["X-Session-Id"] = id;
-  const token = authToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
+  return id ? { "X-Session-Id": id } : {};
 }

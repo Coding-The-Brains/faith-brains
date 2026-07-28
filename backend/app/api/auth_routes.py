@@ -2,15 +2,18 @@
 
 Register/login claims the device's anonymous learner for the account; logging
 in on a second device merges that device's data into the account's primary
-learner. Passwords: stdlib scrypt. Tokens: opaque rows in auth_tokens.
+learner. Passwords: stdlib scrypt. Sessions: opaque expiring tokens in
+auth_tokens, delivered as an httpOnly cookie so page scripts can never read
+them (the frontend proxies /api/v1 same-origin, so the cookie just works).
 """
 
 import hashlib
 import logging
 import re
 import secrets
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +28,8 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth")
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+TOKEN_COOKIE = "fb_token"
+_TOKEN_TTL = timedelta(days=30)
 
 
 def _hash_password(password: str) -> str:
@@ -42,21 +47,31 @@ def _verify_password(password: str, stored: str) -> bool:
         return False
 
 
-async def user_from_token(
+def token_from_request(
+    fb_token: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
+) -> str | None:
+    """Cookie first (the normal path); Authorization: Bearer kept for API clients."""
+    if fb_token:
+        return fb_token
+    if authorization and authorization.startswith("Bearer "):
+        return authorization.removeprefix("Bearer ").strip() or None
+    return None
+
+
+async def current_user(
+    token: str | None = Depends(token_from_request),
     session: AsyncSession = Depends(get_session),
 ) -> User | None:
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-    token = authorization.removeprefix("Bearer ").strip()
     if not token:
         return None
-    row = (
+    return (
         await session.execute(
-            select(User).join(AuthToken, AuthToken.user_id == User.id).where(AuthToken.token == token)
+            select(User)
+            .join(AuthToken, AuthToken.user_id == User.id)
+            .where(AuthToken.token == token, AuthToken.expires_at > datetime.now(UTC))
         )
     ).scalar_one_or_none()
-    return row
 
 
 async def _primary_learner(session: AsyncSession, user: User) -> Learner | None:
@@ -71,7 +86,6 @@ async def _merge_learners(session: AsyncSession, source: Learner, target: Learne
     """Move a device's anonymous data into the account's primary learner."""
     if source.id == target.id:
         return
-    # saved items: drop rows that would collide with ones the account already has
     existing = {
         (r.kind, r.reference)
         for r in (
@@ -85,7 +99,6 @@ async def _merge_learners(session: AsyncSession, source: Learner, target: Learne
             await session.delete(item)
         else:
             item.learner_id = target.id
-    # path progress: same collision rule
     done = {
         (r.path_key, r.step_key)
         for r in (
@@ -99,27 +112,38 @@ async def _merge_learners(session: AsyncSession, source: Learner, target: Learne
             await session.delete(row)
         else:
             row.learner_id = target.id
-    # conversations move wholesale
     await session.execute(
         update(Conversation).where(Conversation.learner_id == source.id).values(learner_id=target.id)
     )
     if target.persona is None and source.persona is not None:
         target.persona = source.persona
-    # the emptied device learner now also belongs to the account, so future
-    # requests from that device resolve to the account primary
     source.user_id = target.user_id
 
 
-async def _issue_token(session: AsyncSession, user: User) -> str:
+async def _start_session(session: AsyncSession, user: User, response: Response) -> None:
+    """Issue a fresh expiring token and hand it to the browser as httpOnly."""
+    # opportunistic cleanup so dead tokens do not pile up
+    await session.execute(
+        delete(AuthToken).where(AuthToken.user_id == user.id, AuthToken.expires_at <= datetime.now(UTC))
+    )
     token = secrets.token_urlsafe(32)
-    session.add(AuthToken(token=token, user_id=user.id))
+    session.add(AuthToken(token=token, user_id=user.id, expires_at=datetime.now(UTC) + _TOKEN_TTL))
     await session.commit()
-    return token
+    response.set_cookie(
+        key=TOKEN_COOKIE,
+        value=token,
+        max_age=int(_TOKEN_TTL.total_seconds()),
+        httponly=True,
+        samesite="lax",
+        path="/",
+        # ponytail: secure=False because the beta serves plain http; set True at https rollout
+    )
 
 
-@router.post("/register", response_model=schemas.AuthOut, dependencies=[Depends(limit_auth)])
+@router.post("/register", response_model=schemas.MeOut, dependencies=[Depends(limit_auth)])
 async def register(
     body: schemas.AuthIn,
+    response: Response,
     learner: Learner = Depends(get_learner),
     session: AsyncSession = Depends(get_session),
 ):
@@ -134,14 +158,16 @@ async def register(
     user = User(email=email, password_hash=_hash_password(body.password))
     session.add(user)
     await session.flush()
-    learner.user_id = user.id  # this device's data becomes the account's data
-    token = await _issue_token(session, user)
-    return schemas.AuthOut(token=token, email=email)
+    if learner.user_id is None:
+        learner.user_id = user.id  # this device's data becomes the account's data
+    await _start_session(session, user, response)
+    return schemas.MeOut(email=email)
 
 
-@router.post("/login", response_model=schemas.AuthOut, dependencies=[Depends(limit_auth)])
+@router.post("/login", response_model=schemas.MeOut, dependencies=[Depends(limit_auth)])
 async def login(
     body: schemas.AuthIn,
+    response: Response,
     learner: Learner = Depends(get_learner),
     session: AsyncSession = Depends(get_session),
 ):
@@ -151,27 +177,41 @@ async def login(
         raise HTTPException(401, "Wrong email or password.")
     primary = await _primary_learner(session, user)
     if primary is None:
-        learner.user_id = user.id
+        if learner.user_id is None:
+            learner.user_id = user.id
     elif learner.user_id is None:
         await _merge_learners(session, learner, primary)
-    token = await _issue_token(session, user)
-    return schemas.AuthOut(token=token, email=email)
+    await _start_session(session, user, response)
+    return schemas.MeOut(email=email)
 
 
 @router.post("/logout", status_code=204, dependencies=[Depends(limit_auth)])
 async def logout(
-    authorization: str | None = Header(default=None),
+    response: Response,
+    token: str | None = Depends(token_from_request),
     session: AsyncSession = Depends(get_session),
 ):
-    if authorization and authorization.startswith("Bearer "):
-        await session.execute(
-            delete(AuthToken).where(AuthToken.token == authorization.removeprefix("Bearer ").strip())
-        )
+    if token:
+        await session.execute(delete(AuthToken).where(AuthToken.token == token))
         await session.commit()
+    response.delete_cookie(TOKEN_COOKIE, path="/")
+
+
+@router.post("/logout-all", status_code=204, dependencies=[Depends(limit_auth)])
+async def logout_all(
+    response: Response,
+    user: User | None = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Sign out on every device by revoking all of the account's tokens."""
+    if user is not None:
+        await session.execute(delete(AuthToken).where(AuthToken.user_id == user.id))
+        await session.commit()
+    response.delete_cookie(TOKEN_COOKIE, path="/")
 
 
 @router.get("/me", response_model=schemas.MeOut)
-async def me(user: User | None = Depends(user_from_token)):
+async def me(user: User | None = Depends(current_user)):
     if user is None:
         raise HTTPException(401, "Not signed in.")
     return schemas.MeOut(email=user.email)
