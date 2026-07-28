@@ -35,7 +35,7 @@ PATHS: list[dict] = [
         "description": "The opening, the greatest verse, pure monotheism, and the first revelation.",
         "steps": [
             {"key": "opening", "title": "The Opening", "kind": "quran", "reference": "1:1"},
-            {"key": "ayat-al-kursi", "title": "Ayat al-Kursi — the greatest verse", "kind": "quran", "reference": "2:255"},
+            {"key": "ayat-al-kursi", "title": "Ayat al-Kursi: the greatest verse", "kind": "quran", "reference": "2:255"},
             {"key": "sincerity", "title": "Say: He is Allah, One", "kind": "quran", "reference": "112:1"},
             {"key": "first-revelation", "title": "The first revelation", "kind": "quran", "reference": "96:1"},
             {"key": "learn-teach", "title": "The best of you learn and teach it", "kind": "hadith", "reference": "bukhari 5027"},
@@ -60,7 +60,7 @@ PATHS: list[dict] = [
         "title": "Beginning Islam",
         "description": "A gentle first path for new Muslims: the Opening, who Allah is, the five pillars, intentions, and hope in mercy.",
         "steps": [
-            {"key": "the-opening", "title": "The Opening — the first surah you'll learn", "kind": "quran", "reference": "1:1"},
+            {"key": "the-opening", "title": "The Opening: the first surah you'll learn", "kind": "quran", "reference": "1:1"},
             {"key": "who-allah-is", "title": "Say: He is Allah, One", "kind": "quran", "reference": "112:1"},
             {"key": "built-on-five", "title": "Islam is built on five", "kind": "hadith", "reference": "bukhari 8"},
             {"key": "intentions-first", "title": "Actions are judged by intentions", "kind": "hadith", "reference": "bukhari 1"},
@@ -74,11 +74,11 @@ PATHS: list[dict] = [
         "description": "The foundations of Muslim life, one pillar at a time, from the sources.",
         "steps": [
             {"key": "the-five", "title": "Islam is built on five", "kind": "hadith", "reference": "bukhari 8"},
-            {"key": "shahada", "title": "Shahada — He is Allah, One", "kind": "quran", "reference": "112:1"},
-            {"key": "salah", "title": "Salah — establish the prayer", "kind": "quran", "reference": "2:43"},
-            {"key": "zakat", "title": "Zakat — give what purifies", "kind": "quran", "reference": "2:110"},
-            {"key": "sawm", "title": "Sawm — fasting is prescribed", "kind": "quran", "reference": "2:183"},
-            {"key": "hajj", "title": "Hajj — pilgrimage to the House", "kind": "quran", "reference": "3:97"},
+            {"key": "shahada", "title": "Shahada: He is Allah, One", "kind": "quran", "reference": "112:1"},
+            {"key": "salah", "title": "Salah: establish the prayer", "kind": "quran", "reference": "2:43"},
+            {"key": "zakat", "title": "Zakat: give what purifies", "kind": "quran", "reference": "2:110"},
+            {"key": "sawm", "title": "Sawm: fasting is prescribed", "kind": "quran", "reference": "2:183"},
+            {"key": "hajj", "title": "Hajj: pilgrimage to the House", "kind": "quran", "reference": "3:97"},
         ],
     },
     {
@@ -86,7 +86,7 @@ PATHS: list[dict] = [
         "title": "The Life of the Prophet ﷺ",
         "description": "A first look at the seerah through the sources: the first revelation, his character, and his mission.",
         "steps": [
-            {"key": "first-revelation", "title": "The cave of Hira — how revelation began", "kind": "hadith", "reference": "bukhari 3"},
+            {"key": "first-revelation", "title": "The cave of Hira: how revelation began", "kind": "hadith", "reference": "bukhari 3"},
             {"key": "not-forsaken", "title": "Your Lord has not forsaken you", "kind": "quran", "reference": "93:3"},
             {"key": "exalted-character", "title": "An exalted standard of character", "kind": "quran", "reference": "68:4"},
             {"key": "best-character", "title": "The best of people in character", "kind": "hadith", "reference": "bukhari 3559"},
@@ -125,7 +125,7 @@ QUIZZES: dict[str, list[dict]] = {
     ],
     "new-muslim-intro": [
         {"q": "Per the hadith of the five pillars, Islam is built on how many things?", "options": ["Three", "Four", "Five", "Seven"], "answer": 2, "why": "Sahih al-Bukhari 8"},
-        {"q": "\"Actions are judged by…\" — the famous first hadith of Bukhari:", "options": ["…their outcomes", "…intentions", "…their difficulty", "…public approval"], "answer": 1, "why": "Sahih al-Bukhari 1"},
+        {"q": "\"Actions are judged by…\", the famous first hadith of Bukhari:", "options": ["…their outcomes", "…intentions", "…their difficulty", "…public approval"], "answer": 1, "why": "Sahih al-Bukhari 1"},
         {"q": "Quran 39:53 tells those who have sinned greatly to…", "options": ["Despair of forgiveness", "Never despair of Allah's mercy", "Hide their sins forever", "Give up worship"], "answer": 1, "why": "Quran 39:53"},
         {"q": "According to the hadith in this path, the religion is…", "options": ["Easy", "A burden", "Only for scholars", "Complicated"], "answer": 0, "why": "Sahih al-Bukhari 39"},
     ],

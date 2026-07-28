@@ -80,7 +80,7 @@ PERSONAS: list[dict] = [
     {
         "key": "new_muslim",
         "label": "New Muslim",
-        "tagline": "A gentle, accurate introduction — one step at a time.",
+        "tagline": "A gentle, accurate introduction, one step at a time.",
         "prompt_hint": (
             "Audience: someone new to Islam.\n"
             "- Be gentle, welcoming, and unhurried; assume no prior knowledge and "
