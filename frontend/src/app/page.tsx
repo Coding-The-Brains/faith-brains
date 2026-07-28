@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type {
   AskResponse,
@@ -22,6 +23,7 @@ import { sessionHeaders } from "@/lib/session";
 import { gradeTone } from "@/components/HadithCard";
 import { isSignedIn } from "@/lib/auth";
 import MicButton from "@/components/MicButton";
+import { loadReadingSpot, type ReadingSpot } from "@/components/ReadingTracker";
 import PersonaOnboarding from "@/components/PersonaOnboarding";
 import Reveal from "@/components/Reveal";
 
@@ -382,9 +384,12 @@ export default function HomePage() {
   const [recent, setRecent] = useState<ConversationSummary[]>([]);
   const [continuePath, setContinuePath] = useState<PathSummary | null>(null);
   const [signedIn, setSignedIn] = useState(false);
+  const [reading, setReading] = useState<ReadingSpot | null>(null);
   useEffect(() => {
     isSignedIn().then(setSignedIn);
+    setReading(loadReadingSpot());
   }, []);
+  const router = useRouter();
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -455,6 +460,27 @@ export default function HomePage() {
   async function submit(q: string) {
     const trimmed = q.trim();
     if (trimmed.length < 3 || busy) return;
+
+    // One box for everything: references open the reader, short phrases search,
+    // real questions go to the AI. The user never picks a tool.
+    const verseRef = trimmed.match(/^(\d{1,3})\s*:\s*(\d{1,3})$/);
+    if (verseRef) {
+      const [, s, a] = verseRef;
+      router.push(`/quran/${s}?page=${Math.ceil(Number(a) / 40)}#a${a}`);
+      return;
+    }
+    const looksLikeQuestion =
+      /[?؟]/.test(trimmed) ||
+      /^(what|how|why|who|when|where|which|can|could|should|is|are|do|does|did|will|would|tell|explain|kya|kyun|kaise|kab|kaun)\b/i.test(
+        trimmed
+      );
+    const words = trimmed.split(/\s+/).length;
+    const hadithRef = /^[a-z]+\s+\d{1,5}$/i.test(trimmed);
+    if (!looksLikeQuestion && (hadithRef || words <= 3)) {
+      router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     setQuestion("");
@@ -588,6 +614,21 @@ export default function HomePage() {
             </div>
           </div>
 
+          {reading && (
+            <Link
+              href={`/quran/${reading.surah}?page=${reading.page}`}
+              className="mb-6 block rounded-lg border border-border bg-surface p-4 transition-colors hover:border-primary/50 hover:bg-elevated"
+            >
+              <p className="text-xs tracking-wide text-accent">Continue reading</p>
+              <div className="mt-1 flex items-center justify-between gap-4">
+                <span className="font-semibold tracking-tight text-text">{reading.name}</span>
+                <span className="shrink-0 text-xs text-muted">
+                  {reading.page > 1 ? `from ayah ${(reading.page - 1) * 40 + 1}` : "from the beginning"} →
+                </span>
+              </div>
+            </Link>
+          )}
+
           {continuePath && (
             <Link
               href={`/learn/${continuePath.key}`}
@@ -665,7 +706,7 @@ export default function HomePage() {
           placeholder={
             threadActive
               ? "Ask a follow-up…"
-              : "e.g. What does the Quran teach about patience in hardship?"
+              : "Ask anything, search a word, or jump to a verse like 2:255"
           }
           className="w-full resize-none bg-transparent px-2 py-1.5 text-text placeholder:text-muted/60 focus:outline-none"
         />

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isSignedIn } from "@/lib/auth";
 import NavTabs from "./NavTabs";
@@ -12,6 +13,7 @@ import ThemeToggle from "./ThemeToggle";
 const EASE = "[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]";
 
 export default function SiteHeader() {
+  const router = useRouter();
   const [condensed, setCondensed] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
 
@@ -65,7 +67,18 @@ export default function SiteHeader() {
               condensed ? "max-w-0 opacity-0" : "max-w-[18rem] opacity-100"
             }`}
           >
-            <form action="/search">
+            <form
+              action="/search"
+              onSubmit={(e) => {
+                // verse references skip search and open the reader directly
+                const q = (new FormData(e.currentTarget).get("q") ?? "").toString().trim();
+                const m = q.match(/^(\d{1,3})\s*:\s*(\d{1,3})$/);
+                if (m) {
+                  e.preventDefault();
+                  router.push(`/quran/${m[1]}?page=${Math.ceil(Number(m[2]) / 40)}#a${m[2]}`);
+                }
+              }}
+            >
               <input
                 type="search"
                 name="q"
