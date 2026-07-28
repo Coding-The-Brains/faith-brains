@@ -2,22 +2,88 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadSaved, removeSaved, type SavedItem } from "@/lib/saved";
+import { isSignedIn } from "@/lib/auth";
+import { sessionHeaders } from "@/lib/session";
+import {
+  loadSaved,
+  removeSaved,
+  serverItemHref,
+  serverItemId,
+  type SavedItem,
+  type ServerSaved,
+} from "@/lib/saved";
+
+type Row = Pick<SavedItem, "id" | "reference" | "href"> &
+  Partial<Pick<SavedItem, "arabic" | "english">> & { kind: "quran" | "hadith" };
 
 export default function SavedPage() {
-  const [items, setItems] = useState<SavedItem[] | null>(null);
-  useEffect(() => setItems(loadSaved()), []);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(null);
 
-  if (items === null) return null;
+  useEffect(() => {
+    isSignedIn().then(async (ok) => {
+      setSignedIn(ok);
+      if (!ok) return;
+      // The account is the source of truth; the local cache only contributes
+      // display text (Arabic + translation) when it has the same item.
+      try {
+        const res = await fetch("/api/v1/saved", { headers: sessionHeaders() });
+        const server: ServerSaved[] = res.ok ? await res.json() : [];
+        const local = new Map(loadSaved().map((s) => [s.id, s]));
+        setRows(
+          server.map((s) => {
+            const id = serverItemId(s);
+            const cached = local.get(id);
+            return {
+              id,
+              kind: s.kind,
+              reference: cached?.reference ?? (s.kind === "quran" ? `Quran ${s.reference}` : s.reference),
+              href: cached?.href ?? serverItemHref(s),
+              arabic: cached?.arabic ?? null,
+              english: cached?.english ?? null,
+            };
+          })
+        );
+      } catch {
+        setRows([]);
+      }
+    });
+  }, []);
+
+  if (signedIn === null) return null;
+
+  if (!signedIn) {
+    return (
+      <div className="mx-auto max-w-sm pt-16 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-text">Saved</h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted">
+          Sign in to save verses and hadith and see them on any device.
+        </p>
+        <Link
+          href="/account"
+          className="mt-6 inline-block rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-on-primary transition-opacity hover:opacity-90"
+        >
+          Sign in
+        </Link>
+      </div>
+    );
+  }
+
+  if (rows === null) return null;
+
+  async function remove(row: Row) {
+    setRows((r) => (r ?? []).filter((x) => x.id !== row.id));
+    removeSaved(row.id); // also issues the server DELETE
+  }
 
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="font-semibold tracking-tight mb-2 text-3xl text-text">Saved</h1>
       <p className="mb-6 text-sm text-muted">
-        Kept on this device. {items.length > 0 ? `${items.length} saved.` : ""}
+        Synced to your account. {rows.length > 0 ? `${rows.length} saved.` : ""}
       </p>
 
-      {items.length === 0 && (
+      {rows.length === 0 && (
         <div className="rounded-lg border border-border bg-surface p-10 text-center text-muted">
           <p>Nothing saved yet.</p>
           <p className="mt-2 text-sm">
@@ -31,7 +97,7 @@ export default function SavedPage() {
       )}
 
       <div className="space-y-4">
-        {items.map((item) => (
+        {rows.map((item) => (
           <article key={item.id} className="rounded-lg border border-border bg-surface p-5">
             <div className="flex items-start justify-between gap-3">
               <Link href={item.href} className="text-sm tracking-wide text-accent hover:underline">
@@ -39,8 +105,8 @@ export default function SavedPage() {
               </Link>
               <button
                 type="button"
-                onClick={() => setItems(removeSaved(item.id))}
-                className="text-xs text-muted hover:text-text"
+                onClick={() => remove(item)}
+                className="cursor-pointer text-xs text-muted hover:text-text"
               >
                 Remove
               </button>

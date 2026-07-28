@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { resetAuthCache } from "@/lib/auth";
+import { clearLocalSaved } from "@/lib/saved";
 import { rotateSession, sessionHeaders } from "@/lib/session";
 
 type Mode = "signin" | "signup";
@@ -39,6 +41,7 @@ export default function AccountPage() {
         setError(body?.detail ?? "Something went wrong. Try again.");
         return;
       }
+      resetAuthCache();
       setSignedIn(body.email);
       setPassword("");
     } catch {
@@ -55,6 +58,8 @@ export default function AccountPage() {
       // cookie may survive a network blip; the UI still resets below
     }
     rotateSession(); // fresh anonymous identity so new activity stays out of the account
+    clearLocalSaved(); // saved display cache belongs to the account that just left
+    resetAuthCache();
     setSignedIn(null);
   }
 

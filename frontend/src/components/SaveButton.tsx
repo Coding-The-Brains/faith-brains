@@ -1,6 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { isSignedIn } from "@/lib/auth";
 import { isSaved, toggleSaved, type SavedItem } from "@/lib/saved";
 
 export default function SaveButton({
@@ -10,13 +12,21 @@ export default function SaveButton({
   item: Omit<SavedItem, "savedAt">;
   onPaper?: boolean;
 }) {
+  const router = useRouter();
   const [saved, setSaved] = useState(false);
   useEffect(() => setSaved(isSaved(item.id)), [item.id]);
 
   return (
     <button
       type="button"
-      onClick={() => setSaved(toggleSaved(item))}
+      onClick={async () => {
+        // Saving is an account feature; signed-out taps go to sign-in
+        if (!(await isSignedIn())) {
+          router.push("/account");
+          return;
+        }
+        setSaved(toggleSaved(item));
+      }}
       aria-pressed={saved}
       title={saved ? "Remove from Saved" : "Save"}
       className={`rounded-full p-1.5 transition-colors ${

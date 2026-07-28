@@ -62,6 +62,28 @@ export function toggleSaved(item: Omit<SavedItem, "savedAt">): boolean {
   return !exists;
 }
 
+// Server rows carry only kind + reference; rebuild id/href for display when
+// the local cache (which holds the full text) has no matching entry.
+export type ServerSaved = { kind: "quran" | "hadith"; reference: string };
+
+export function serverItemId(s: ServerSaved): string {
+  return s.kind === "hadith" ? `hadith:${s.reference.replace(/\s+/, ":")}` : `quran:${s.reference}`;
+}
+
+export function serverItemHref(s: ServerSaved): string {
+  if (s.kind === "hadith") return `/hadith/${s.reference.split(/\s+/)[0]}`;
+  const [surah, ayah] = s.reference.split(":");
+  return `/quran/${surah}?page=${Math.ceil(Number(ayah) / 40)}#a${ayah}`;
+}
+
+export function clearLocalSaved(): void {
+  try {
+    window.localStorage.removeItem(KEY);
+  } catch {
+    // storage blocked: nothing cached anyway
+  }
+}
+
 export function removeSaved(id: string): SavedItem[] {
   const items = loadSaved();
   const removed = items.find((s) => s.id === id);
