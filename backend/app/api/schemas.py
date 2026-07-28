@@ -302,3 +302,12 @@ class AuthIn(BaseModel):
 
 class MeOut(BaseModel):
     email: str
+
+
+class ForgotIn(BaseModel):
+    email: str
+
+
+class ResetIn(BaseModel):
+    token: str
+    password: str

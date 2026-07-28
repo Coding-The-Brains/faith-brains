@@ -263,6 +263,18 @@ class AuthToken(Base):
     )
 
 
+class PasswordReset(Base):
+    """Single-use reset token, emailed as a link; deleted on use."""
+
+    __tablename__ = "password_resets"
+
+    token: Mapped[str] = mapped_column(sa.Text, primary_key=True)
+    user_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("users.id"))
+    expires_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.text("now() + interval '1 hour'")
+    )
+
+
 class Conversation(Base):
     """A multi-turn ask thread owned by an anonymous learner."""
 

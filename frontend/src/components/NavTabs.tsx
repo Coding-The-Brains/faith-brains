@@ -1,22 +1,29 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { isSignedIn } from "@/lib/auth";
 
 const TABS = [
   { href: "/", label: "Ask" },
   { href: "/quran", label: "Quran" },
   { href: "/hadith", label: "Hadith" },
   { href: "/learn", label: "Learn" },
-  { href: "/saved", label: "Saved" },
+  { href: "/saved", label: "Saved", authOnly: true },
 ];
 
 export default function NavTabs({ variant = "tabs" }: { variant?: "tabs" | "pill" }) {
   const pathname = usePathname();
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    isSignedIn().then(setSignedIn);
+  }, []);
+  const tabs = TABS.filter((t) => !t.authOnly || signedIn);
   if (variant === "pill") {
     return (
       <nav className="flex items-center gap-1" aria-label="Sections">
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const active = tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
           return (
             <Link
@@ -36,7 +43,7 @@ export default function NavTabs({ variant = "tabs" }: { variant?: "tabs" | "pill
   }
   return (
     <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label="Sections">
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const active = tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
         return (
           <Link

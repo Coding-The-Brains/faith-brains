@@ -19,9 +19,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import schemas
 from app.api.learner_routes import get_learner
-from app.api.ratelimit import limit_auth
+from app.api.ratelimit import email_limiter, limit_auth
+from app.config import get_settings
 from app.db.engine import get_session
-from app.db.models import AuthToken, Conversation, Learner, PathProgress, SavedItem, User
+from app.db.models import (
+    AuthToken,
+    Conversation,
+    Learner,
+    PasswordReset,
+    PathProgress,
+    SavedItem,
+    User,
+)
 
 log = logging.getLogger(__name__)
 
@@ -172,6 +181,8 @@ async def login(
     session: AsyncSession = Depends(get_session),
 ):
     email = body.email.strip().lower()
+    # Per-IP limiting is upstream; this throttles guessing one account from many IPs
+    await email_limiter.check(f"email:{email}")
     user = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if user is None or not _verify_password(body.password, user.password_hash):
         raise HTTPException(401, "Wrong email or password.")
@@ -215,3 +226,71 @@ async def me(user: User | None = Depends(current_user)):
     if user is None:
         raise HTTPException(401, "Not signed in.")
     return schemas.MeOut(email=user.email)
+
+
+@router.post("/forgot", status_code=204, dependencies=[Depends(limit_auth)])
+async def forgot_password(
+    body: schemas.ForgotIn,
+    session: AsyncSession = Depends(get_session),
+):
+    """Email a single-use reset link. Always 204 so email existence never leaks."""
+    settings = get_settings()
+    if not settings.resend_api_key:
+        raise HTTPException(503, "Password reset is not configured on this server.")
+    email = body.email.strip().lower()
+    await email_limiter.check(f"forgot:{email}")
+    user = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if user is None:
+        return  # same response as success: no enumeration
+    token = secrets.token_urlsafe(32)
+    session.add(PasswordReset(token=token, user_id=user.id))
+    await session.commit()
+
+    import httpx
+
+    link = f"{settings.app_base_url.rstrip('/')}/account?reset={token}"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                json={
+                    "from": settings.email_from,
+                    "to": [email],
+                    "subject": "Reset your FaithBrains password",
+                    "text": (
+                        "Someone asked to reset the password for this FaithBrains account.\n\n"
+                        f"Reset it here (link expires in 1 hour): {link}\n\n"
+                        "If this wasn't you, you can ignore this email."
+                    ),
+                },
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError:
+        log.warning("reset email send failed", exc_info=True)
+        raise HTTPException(502, "Could not send the reset email. Try again.") from None
+
+
+@router.post("/reset", status_code=204, dependencies=[Depends(limit_auth)])
+async def reset_password(
+    body: schemas.ResetIn,
+    session: AsyncSession = Depends(get_session),
+):
+    if len(body.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+    row = (
+        await session.execute(
+            select(PasswordReset).where(
+                PasswordReset.token == body.token,
+                PasswordReset.expires_at > datetime.now(UTC),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(400, "This reset link is invalid or has expired. Request a new one.")
+    user = (await session.execute(select(User).where(User.id == row.user_id))).scalar_one()
+    user.password_hash = _hash_password(body.password)
+    await session.delete(row)
+    # a reset signs out every existing session: whoever holds old tokens is out
+    await session.execute(delete(AuthToken).where(AuthToken.user_id == user.id))
+    await session.commit()

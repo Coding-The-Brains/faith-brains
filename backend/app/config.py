@@ -37,6 +37,11 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000"
 
+    # Password-reset email (Resend). Reset stays 503 until the key is set.
+    resend_api_key: str = ""
+    email_from: str = "FaithBrains <onboarding@resend.dev>"
+    app_base_url: str = "http://localhost:3000"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

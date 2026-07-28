@@ -90,7 +90,8 @@ class DbLimiter:
 ask_limiter = DbLimiter("ask", limit=15)  # AI generation is the expensive path
 search_limiter = DbLimiter("search", limit=60)
 transcribe_limiter = DbLimiter("transcribe", limit=10)  # audio upload + STT call
-auth_limiter = DbLimiter("auth", limit=10)  # register/login attempts
+auth_limiter = DbLimiter("auth", limit=10)  # register/login attempts per IP
+email_limiter = DbLimiter("auth-email", limit=5)  # attempts per target account
 
 
 def _client_key(request: Request) -> str:

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { isSignedIn } from "@/lib/auth";
 import NavTabs from "./NavTabs";
 import ThemeToggle from "./ThemeToggle";
 
@@ -12,8 +13,10 @@ const EASE = "[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]";
 
 export default function SiteHeader() {
   const [condensed, setCondensed] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
+    isSignedIn().then(setSignedIn);
     const onScroll = () => setCondensed(window.scrollY > 80);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -51,7 +54,8 @@ export default function SiteHeader() {
           </span>
         </Link>
 
-        <div className="no-scrollbar min-w-0 overflow-x-auto">
+        {/* On xl the signed-in sidebar carries the nav; the header keeps it elsewhere */}
+        <div className={`no-scrollbar min-w-0 overflow-x-auto ${signedIn ? "xl:hidden" : ""}`}>
           <NavTabs variant="pill" />
         </div>
 

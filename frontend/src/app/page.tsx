@@ -20,6 +20,7 @@ import {
 } from "@/lib/persona";
 import { sessionHeaders } from "@/lib/session";
 import { gradeTone } from "@/components/HadithCard";
+import { isSignedIn } from "@/lib/auth";
 import MicButton from "@/components/MicButton";
 import PersonaOnboarding from "@/components/PersonaOnboarding";
 import Reveal from "@/components/Reveal";
@@ -380,6 +381,10 @@ export default function HomePage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [recent, setRecent] = useState<ConversationSummary[]>([]);
   const [continuePath, setContinuePath] = useState<PathSummary | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    isSignedIn().then(setSignedIn);
+  }, []);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -760,7 +765,14 @@ export default function HomePage() {
 
       {!threadActive && recent.length > 0 && (
         <section className="mt-10">
-          <h2 className="font-semibold tracking-tight mb-3 text-lg text-accent">Recent conversations</h2>
+          <h2 className="font-semibold tracking-tight mb-3 text-lg text-accent">
+            Recent conversations
+            {!signedIn && (
+              <span className="ml-2 text-xs font-normal tracking-normal text-muted">
+                on this device
+              </span>
+            )}
+          </h2>
           <div className="space-y-2">
             {recent.map((c) => (
               <button

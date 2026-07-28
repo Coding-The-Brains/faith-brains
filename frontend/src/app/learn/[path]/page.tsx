@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
+import { isSignedIn } from "@/lib/auth";
 import { sessionHeaders } from "@/lib/session";
 
 type Step = {
@@ -129,6 +131,7 @@ function Quiz({
 
 export default function PathPage({ params }: { params: Promise<{ path: string }> }) {
   const { path } = use(params);
+  const router = useRouter();
   const [detail, setDetail] = useState<PathDetail | null>(null);
   const [missing, setMissing] = useState(false);
 
@@ -140,6 +143,11 @@ export default function PathPage({ params }: { params: Promise<{ path: string }>
 
   async function markStudied(step: Step) {
     if (!detail || step.completed) return;
+    // Progress belongs to an account, like saves; reading stays open to everyone
+    if (!(await isSignedIn())) {
+      router.push("/account");
+      return;
+    }
     setDetail({
       ...detail,
       steps: detail.steps.map((s) => (s.key === step.key ? { ...s, completed: true } : s)),
@@ -227,9 +235,11 @@ export default function PathPage({ params }: { params: Promise<{ path: string }>
         <Quiz
           questions={detail.quiz}
           alreadyDone={detail.quiz_completed}
-          onPassed={() => {
+          onPassed={async () => {
             if (detail.quiz_completed) return;
             setDetail({ ...detail, quiz_completed: true });
+            // anyone can take the quiz; only accounts record the result
+            if (!(await isSignedIn())) return;
             fetch(`/api/v1/learn/paths/${path}/steps/quiz/complete`, {
               method: "POST",
               headers: sessionHeaders(),
