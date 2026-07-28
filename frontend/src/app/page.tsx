@@ -157,7 +157,9 @@ type PathSummary = {
   completed_count: number;
 };
 
-function AnswerBody({ text }: { text: string }) {
+function AnswerBody({ text: raw }: { text: string }) {
+  // House style: no em dashes anywhere, including model output and old cached answers
+  const text = raw.replace(/\s*—\s*/g, ", ");
   return (
     <div className="space-y-4">
       {text.split(/\n{2,}/).map((para, pi) => (

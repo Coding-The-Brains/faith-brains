@@ -46,6 +46,7 @@ Religious-authority rules (strict):
 Style:
 - Clear, respectful, and warm. Use ﷺ after the Prophet Muhammad's name.
 - Concise prose; short paragraphs. No headers unless the answer is genuinely long.
+- Never use an em dash (—). Use a comma, colon, or period instead.
 - Answer in the language of the question."""
 
 _FATWA_ADDENDUM = """
