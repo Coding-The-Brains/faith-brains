@@ -72,6 +72,14 @@ async def get_learner(
     learner = (
         await session.execute(select(Learner).where(Learner.session_id == x_session_id))
     ).scalar_one_or_none()
+    if learner is not None and learner.user_id is not None:
+        # Invariant: a bare session id must NEVER reach account data — that is
+        # only reachable with a valid token. This learner was claimed by an
+        # account (register/login on this device), so retire its session id and
+        # hand the signed-out device a fresh, empty anonymous learner.
+        learner.session_id = f"{x_session_id}.claimed.{learner.id}"
+        await session.flush()
+        learner = None
     if learner is None:
         # Upsert handles two first-requests racing on the same fresh session id
         await session.execute(
