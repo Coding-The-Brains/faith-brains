@@ -1,0 +1,177 @@
+"""Optional accounts on top of anonymous learners.
+
+Register/login claims the device's anonymous learner for the account; logging
+in on a second device merges that device's data into the account's primary
+learner. Passwords: stdlib scrypt. Tokens: opaque rows in auth_tokens.
+"""
+
+import hashlib
+import logging
+import re
+import secrets
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy import delete, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api import schemas
+from app.api.learner_routes import get_learner
+from app.api.ratelimit import limit_auth
+from app.db.engine import get_session
+from app.db.models import AuthToken, Conversation, Learner, PathProgress, SavedItem, User
+
+log = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/auth")
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
+    return f"scrypt${salt.hex()}${digest.hex()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        _, salt_hex, digest_hex = stored.split("$")
+        digest = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt_hex), n=2**14, r=8, p=1)
+        return secrets.compare_digest(digest.hex(), digest_hex)
+    except Exception:  # noqa: BLE001 — malformed hash must read as wrong password
+        return False
+
+
+async def user_from_token(
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> User | None:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        return None
+    row = (
+        await session.execute(
+            select(User).join(AuthToken, AuthToken.user_id == User.id).where(AuthToken.token == token)
+        )
+    ).scalar_one_or_none()
+    return row
+
+
+async def _primary_learner(session: AsyncSession, user: User) -> Learner | None:
+    return (
+        await session.execute(
+            select(Learner).where(Learner.user_id == user.id).order_by(Learner.created_at).limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def _merge_learners(session: AsyncSession, source: Learner, target: Learner) -> None:
+    """Move a device's anonymous data into the account's primary learner."""
+    if source.id == target.id:
+        return
+    # saved items: drop rows that would collide with ones the account already has
+    existing = {
+        (r.kind, r.reference)
+        for r in (
+            await session.execute(select(SavedItem).where(SavedItem.learner_id == target.id))
+        ).scalars()
+    }
+    for item in (
+        await session.execute(select(SavedItem).where(SavedItem.learner_id == source.id))
+    ).scalars():
+        if (item.kind, item.reference) in existing:
+            await session.delete(item)
+        else:
+            item.learner_id = target.id
+    # path progress: same collision rule
+    done = {
+        (r.path_key, r.step_key)
+        for r in (
+            await session.execute(select(PathProgress).where(PathProgress.learner_id == target.id))
+        ).scalars()
+    }
+    for row in (
+        await session.execute(select(PathProgress).where(PathProgress.learner_id == source.id))
+    ).scalars():
+        if (row.path_key, row.step_key) in done:
+            await session.delete(row)
+        else:
+            row.learner_id = target.id
+    # conversations move wholesale
+    await session.execute(
+        update(Conversation).where(Conversation.learner_id == source.id).values(learner_id=target.id)
+    )
+    if target.persona is None and source.persona is not None:
+        target.persona = source.persona
+    # the emptied device learner now also belongs to the account, so future
+    # requests from that device resolve to the account primary
+    source.user_id = target.user_id
+
+
+async def _issue_token(session: AsyncSession, user: User) -> str:
+    token = secrets.token_urlsafe(32)
+    session.add(AuthToken(token=token, user_id=user.id))
+    await session.commit()
+    return token
+
+
+@router.post("/register", response_model=schemas.AuthOut, dependencies=[Depends(limit_auth)])
+async def register(
+    body: schemas.AuthIn,
+    learner: Learner = Depends(get_learner),
+    session: AsyncSession = Depends(get_session),
+):
+    email = body.email.strip().lower()
+    if not _EMAIL_RE.fullmatch(email):
+        raise HTTPException(400, "Enter a valid email address.")
+    if len(body.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+    exists = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if exists:
+        raise HTTPException(409, "An account with this email already exists. Sign in instead.")
+    user = User(email=email, password_hash=_hash_password(body.password))
+    session.add(user)
+    await session.flush()
+    learner.user_id = user.id  # this device's data becomes the account's data
+    token = await _issue_token(session, user)
+    return schemas.AuthOut(token=token, email=email)
+
+
+@router.post("/login", response_model=schemas.AuthOut, dependencies=[Depends(limit_auth)])
+async def login(
+    body: schemas.AuthIn,
+    learner: Learner = Depends(get_learner),
+    session: AsyncSession = Depends(get_session),
+):
+    email = body.email.strip().lower()
+    user = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if user is None or not _verify_password(body.password, user.password_hash):
+        raise HTTPException(401, "Wrong email or password.")
+    primary = await _primary_learner(session, user)
+    if primary is None:
+        learner.user_id = user.id
+    elif learner.user_id is None:
+        await _merge_learners(session, learner, primary)
+    token = await _issue_token(session, user)
+    return schemas.AuthOut(token=token, email=email)
+
+
+@router.post("/logout", status_code=204, dependencies=[Depends(limit_auth)])
+async def logout(
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+):
+    if authorization and authorization.startswith("Bearer "):
+        await session.execute(
+            delete(AuthToken).where(AuthToken.token == authorization.removeprefix("Bearer ").strip())
+        )
+        await session.commit()
+
+
+@router.get("/me", response_model=schemas.MeOut)
+async def me(user: User | None = Depends(user_from_token)):
+    if user is None:
+        raise HTTPException(401, "Not signed in.")
+    return schemas.MeOut(email=user.email)

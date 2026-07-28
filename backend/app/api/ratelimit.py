@@ -90,6 +90,7 @@ class DbLimiter:
 ask_limiter = DbLimiter("ask", limit=15)  # AI generation is the expensive path
 search_limiter = DbLimiter("search", limit=60)
 transcribe_limiter = DbLimiter("transcribe", limit=10)  # audio upload + STT call
+auth_limiter = DbLimiter("auth", limit=10)  # register/login attempts
 
 
 def _client_key(request: Request) -> str:
@@ -110,3 +111,7 @@ async def limit_search(request: Request) -> None:
 
 async def limit_transcribe(request: Request) -> None:
     await transcribe_limiter.check(_client_key(request))
+
+
+async def limit_auth(request: Request) -> None:
+    await auth_limiter.check(_client_key(request))

@@ -71,6 +71,17 @@ export default function SiteHeader() {
               />
             </form>
           </div>
+          <Link
+            href="/account"
+            aria-label="Account"
+            title="Account"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted transition-colors duration-200 hover:border-primary hover:text-text"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" />
+            </svg>
+          </Link>
           <ThemeToggle />
         </div>
       </header>

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import SaveButton from "@/components/SaveButton";
+import ShareButton from "@/components/ShareButton";
 import TafsirToggle from "@/components/TafsirToggle";
+import WordByWord from "@/components/WordByWord";
 import { arabicNumber } from "@/lib/api";
 
 // The signature element: an illuminated verse panel — elevated surface, primary hairline,
@@ -46,18 +48,22 @@ export default function VerseCard({
               <>{surahName ? `${surahName} · ` : ""}Quran {reference}</>
             )}
           </span>
-          <SaveButton
-            onPaper
-            item={{
-              id: `quran:${reference}`,
-              kind: "quran",
-              reference: `Quran ${reference}`,
-              arabic,
-              english: translation,
-              href: `/quran/${surah}`,
-            }}
-          />
+          <span className="flex items-center gap-1">
+            <ShareButton arabic={arabic} english={translation} reference={`Quran ${reference}`} />
+            <SaveButton
+              onPaper
+              item={{
+                id: `quran:${reference}`,
+                kind: "quran",
+                reference: `Quran ${reference}`,
+                arabic,
+                english: translation,
+                href: `/quran/${surah}`,
+              }}
+            />
+          </span>
         </div>
+        <WordByWord surah={surah} ayah={ayah} />
         <TafsirToggle surah={surah} ayah={ayah} />
       </div>
     </article>

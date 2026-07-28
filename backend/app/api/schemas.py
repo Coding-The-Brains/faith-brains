@@ -293,3 +293,17 @@ class AdminStatsOut(BaseModel):
     asks_by_category: dict[str, int]
     asks_errored: int
     avg_latency_ms: float | None
+
+
+class AuthIn(BaseModel):
+    email: str
+    password: str
+
+
+class AuthOut(BaseModel):
+    token: str
+    email: str
+
+
+class MeOut(BaseModel):
+    email: str

@@ -1,4 +1,5 @@
 import SaveButton from "@/components/SaveButton";
+import ShareButton from "@/components/ShareButton";
 import type { Grading } from "@/lib/api";
 
 export function gradeTone(grade: string | null): string {
@@ -35,16 +36,19 @@ export default function HadithCard({
           {collectionName} · {number}
           {bookName ? <span className="text-muted"> · {bookName}</span> : null}
         </p>
-        <SaveButton
-          item={{
-            id: `hadith:${collection}:${number}`,
-            kind: "hadith",
-            reference: `${collectionName} ${number}`,
-            arabic,
-            english,
-            href: `/hadith/${collection}`,
-          }}
-        />
+        <span className="flex items-center gap-1">
+          <ShareButton arabic={arabic} english={english} reference={`${collectionName} ${number}`} />
+          <SaveButton
+            item={{
+              id: `hadith:${collection}:${number}`,
+              kind: "hadith",
+              reference: `${collectionName} ${number}`,
+              arabic,
+              english,
+              href: `/hadith/${collection}`,
+            }}
+          />
+        </span>
       </div>
       {english && <p className="mt-3 leading-relaxed text-text/90">{english}</p>}
       {arabic && (

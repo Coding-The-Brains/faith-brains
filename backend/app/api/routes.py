@@ -164,6 +164,72 @@ async def verse_detail(
     return _verse_out(verse)
 
 
+_WORDS_SELECT = "SELECT position, arabic, translation, transliteration FROM quran_words WHERE surah = :s AND ayah = :a ORDER BY position"
+_WORDS_INSERT = (
+    "INSERT INTO quran_words (surah, ayah, position, arabic, translation, transliteration) "
+    "VALUES (:s, :a, :p, :ar, :tr, :tl) ON CONFLICT DO NOTHING"
+)
+
+
+@router.get("/quran/{surah_number}/{ayah_number}/words", dependencies=[Depends(limit_search)])
+async def verse_words(
+    surah_number: int,
+    ayah_number: int,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Word-by-word gloss for one ayah, lazily cached from the quran.com v4 API.
+
+    ponytail: runtime dependency on api.quran.com for the first request per
+    ayah; bulk-ingest the corpus if that API ever becomes a problem.
+    """
+    from sqlalchemy import text as sql
+
+    rows = (await session.execute(sql(_WORDS_SELECT), {"s": surah_number, "a": ayah_number})).all()
+    if not rows:
+        import httpx
+
+        url = (
+            f"https://api.quran.com/api/v4/verses/by_key/{surah_number}:{ayah_number}"
+            "?words=true&word_fields=text_uthmani&word_translation_language=en"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, "Word-by-word data is unavailable right now. Try again.") from exc
+        words = [
+            w
+            for w in resp.json().get("verse", {}).get("words", [])
+            if w.get("char_type_name") == "word"
+        ]
+        if not words:
+            raise HTTPException(404, "No word data for this ayah.")
+        for w in words:
+            await session.execute(
+                sql(_WORDS_INSERT),
+                {
+                    "s": surah_number,
+                    "a": ayah_number,
+                    "p": w["position"],
+                    "ar": w.get("text_uthmani") or w.get("text") or "",
+                    "tr": (w.get("translation") or {}).get("text") or "",
+                    "tl": (w.get("transliteration") or {}).get("text") or "",
+                },
+            )
+        await session.commit()
+        rows = (await session.execute(sql(_WORDS_SELECT), {"s": surah_number, "a": ayah_number})).all()
+    return {
+        "surah": surah_number,
+        "ayah": ayah_number,
+        "source": "quran.com word-by-word",
+        "words": [
+            {"position": r.position, "arabic": r.arabic, "translation": r.translation, "transliteration": r.transliteration}
+            for r in rows
+        ],
+    }
+
+
 @router.get("/quran/{surah_number}/{ayah_number}/tafsir", response_model=list[schemas.TafsirOut])
 async def verse_tafsir(
     surah_number: int,

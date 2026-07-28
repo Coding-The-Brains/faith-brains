@@ -18,6 +18,7 @@ from app.content.learning_paths import PATHS, PATHS_BY_KEY, QUIZZES
 from app.content.personas import PERSONAS
 from app.db.engine import get_session
 from app.db.models import (
+    AuthToken,
     Conversation,
     Edition,
     HadithCollection,
@@ -40,8 +41,26 @@ _SESSION_RE = re.compile(r"[A-Za-z0-9-]{8,64}")
 
 async def get_learner(
     x_session_id: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> Learner:
+    # Signed-in requests resolve to the account's primary learner, so data
+    # follows the account across devices. Stale tokens fall back to anonymous.
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        claimed = (
+            await session.execute(
+                select(Learner)
+                .join(AuthToken, AuthToken.user_id == Learner.user_id)
+                .where(AuthToken.token == token)
+                .order_by(Learner.created_at)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if claimed is not None:
+            claimed.last_seen_at = datetime.now(UTC)
+            await session.commit()
+            return claimed
     if not x_session_id or not _SESSION_RE.fullmatch(x_session_id):
         raise HTTPException(400, "X-Session-Id header required (client-generated UUID)")
     learner = (
@@ -64,11 +83,16 @@ async def get_learner(
 
 async def get_learner_optional(
     x_session_id: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> Learner | None:
-    if not x_session_id or not _SESSION_RE.fullmatch(x_session_id):
+    has_token = bool(authorization and authorization.startswith("Bearer "))
+    if not has_token and (not x_session_id or not _SESSION_RE.fullmatch(x_session_id)):
         return None
-    return await get_learner(x_session_id, session)
+    try:
+        return await get_learner(x_session_id, authorization, session)
+    except HTTPException:
+        return None  # stale token + no session id: treat as signed out
 
 
 # -- personas --------------------------------------------------------------------

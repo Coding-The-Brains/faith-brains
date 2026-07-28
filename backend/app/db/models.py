@@ -228,6 +228,34 @@ class Learner(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     # Self-chosen learning role (app.content.personas key) — not belief profiling
     persona: Mapped[str | None] = mapped_column(sa.Text)
+    # Set when an account claims this learner (accounts are optional)
+    user_id: Mapped[int | None] = mapped_column(sa.ForeignKey("users.id"))
+
+
+class User(Base):
+    """An optional account. Owns learners via learners.user_id; the earliest
+    claimed learner is the account's primary data home."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(sa.Text, unique=True)
+    password_hash: Mapped[str] = mapped_column(sa.Text)
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
+    )
+
+
+class AuthToken(Base):
+    """Opaque bearer token, revocable by row delete. No JWT machinery needed."""
+
+    __tablename__ = "auth_tokens"
+
+    token: Mapped[str] = mapped_column(sa.Text, primary_key=True)
+    user_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
+    )
 
 
 class Conversation(Base):
