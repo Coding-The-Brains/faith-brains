@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { handsFreeEnabled, setHandsFree, stopSpeaking } from "@/lib/tts";
 
 const MAX_SECONDS = 60;
 
@@ -26,6 +27,11 @@ export default function VoiceOverlay({
   onClose: () => void;
 }) {
   const [phase, setPhase] = useState<"starting" | "listening" | "busy">("starting");
+  const [handsFree, setHandsFreeState] = useState(false);
+  useEffect(() => {
+    setHandsFreeState(handsFreeEnabled());
+    stopSpeaking(); // never record while the previous answer is still talking
+  }, []);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -193,6 +199,36 @@ export default function VoiceOverlay({
           </>
         )}
       </p>
+
+      <button
+        type="button"
+        onClick={() => {
+          const next = !handsFree;
+          setHandsFree(next);
+          setHandsFreeState(next);
+          buzz(10);
+        }}
+        aria-pressed={handsFree}
+        className={`mt-8 inline-flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-xs transition-colors duration-200 ${
+          handsFree
+            ? "border-primary/60 bg-accent-soft text-accent"
+            : "border-border text-muted hover:border-primary hover:text-text"
+        }`}
+      >
+        <span
+          className={`h-2 w-2 rounded-full ${handsFree ? "bg-primary" : "bg-border"}`}
+          aria-hidden="true"
+        />
+        {handsFree ? (
+          <>
+            Hands-free on: the answer will be asked and spoken automatically
+          </>
+        ) : (
+          <>
+            Hands-free off: your words go to the box first · <span lang="ur">جواب خود سنیں؟</span>
+          </>
+        )}
+      </button>
     </div>
   );
 }

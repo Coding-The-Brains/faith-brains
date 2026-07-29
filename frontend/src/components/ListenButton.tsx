@@ -1,42 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { speakText, stopSpeaking } from "@/lib/tts";
 
-// Reads an answer aloud with the browser's built-in voice. For readers who
-// find listening easier than reading. Answer prose only; the Quranic Arabic
-// on verse cards is never synthesized.
+// Reads an answer aloud with the browser's built-in voice.
 export default function ListenButton({ text }: { text: string }) {
   const [supported, setSupported] = useState(false);
   const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
     setSupported(typeof window !== "undefined" && "speechSynthesis" in window);
-    return () => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
-    };
+    return () => stopSpeaking();
   }, []);
 
   if (!supported || !text) return null;
 
   function toggle() {
-    const synth = window.speechSynthesis;
     if (speaking) {
-      synth.cancel();
+      stopSpeaking();
       setSpeaking(false);
       return;
     }
-    const clean = text.replace(/\[\d+\]/g, "").replace(/\s{2,}/g, " ").trim();
-    const utterance = new SpeechSynthesisUtterance(clean);
-    // Urdu answers are written in Arabic script; pick the matching voice family
-    utterance.lang = /[؀-ۿ]/.test(clean) ? "ur-PK" : "en-US";
-    utterance.rate = 0.95;
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    synth.cancel();
-    synth.speak(utterance);
-    setSpeaking(true);
+    if (speakText(text, () => setSpeaking(false))) setSpeaking(true);
   }
 
   return (

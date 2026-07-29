@@ -22,6 +22,7 @@ import {
 import { sessionHeaders } from "@/lib/session";
 import { gradeTone } from "@/components/HadithCard";
 import { isSignedIn } from "@/lib/auth";
+import { handsFreeEnabled, speakText } from "@/lib/tts";
 import ListenButton from "@/components/ListenButton";
 import MicButton from "@/components/MicButton";
 import { loadReadingSpot, type ReadingSpot } from "@/components/ReadingTracker";
@@ -376,6 +377,8 @@ export default function HomePage() {
   const router = useRouter();
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Hands-free: the next completed answer is read aloud automatically
+  const autoSpeakRef = useRef(false);
 
   useEffect(() => {
     const stored = loadPersona();
@@ -485,6 +488,7 @@ export default function HomePage() {
         }),
       });
       if (!res.ok || !res.body) {
+        autoSpeakRef.current = false;
         const body = await res.json().catch(() => null);
         setError(body?.detail ?? `Something went wrong (${res.status}). Try again.`);
         setMessages(base);
@@ -508,7 +512,12 @@ export default function HomePage() {
           };
           if (evt.conversation_id) setConversationId(evt.conversation_id);
           refreshRecent();
+          if (autoSpeakRef.current) {
+            autoSpeakRef.current = false;
+            speakText(assistant.content);
+          }
         } else if (evt.event === "error") {
+          autoSpeakRef.current = false;
           setError(evt.detail ?? "The answer engine failed mid-response. Try again.");
           return;
         }
@@ -531,6 +540,7 @@ export default function HomePage() {
         }
       }
     } catch {
+      autoSpeakRef.current = false;
       setError("Could not reach the server. Try again in a moment.");
       setMessages(base);
     } finally {
@@ -702,7 +712,14 @@ export default function HomePage() {
         <div className="mt-4 flex justify-center">
           <MicButton
             large
-            onText={(t) => setQuestion((q) => (q ? q.trimEnd() + " " : "") + t)}
+            onText={(t) => {
+              if (handsFreeEnabled()) {
+                autoSpeakRef.current = true;
+                submit(t); // speak → ask → the answer is read aloud, no taps
+              } else {
+                setQuestion((q) => (q ? q.trimEnd() + " " : "") + t);
+              }
+            }}
             onError={(m) => setError(m || null)}
           />
         </div>
