@@ -36,36 +36,14 @@ const SAMPLES = [
   "Which hadith is about intentions?",
 ];
 
+// "How it works" mock, shown below the composer for people who scroll
 function LandingPage() {
   return (
-    <div className="pb-20">
-      <section className="grid min-h-[calc(100dvh-11rem)] items-center gap-10 py-10 md:grid-cols-[0.9fr_1.1fr] md:py-14">
-        <div className="relative z-10">
-          <h1 className="font-semibold tracking-tight max-w-lg text-5xl leading-[1.04] text-text sm:text-6xl">
-            Learn from the sources themselves.
-          </h1>
-          <p className="mt-5 max-w-md text-lg leading-relaxed text-muted">
-            Every answer traces back to its source.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="#ask"
-              className="rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary transition-transform hover:bg-primary-hover active:translate-y-px"
-            >
-              Start exploring
-            </Link>
-            <Link
-              href="/learn"
-              className="rounded-full border border-primary/50 px-5 py-3 text-sm font-bold text-accent transition-colors hover:border-primary hover:text-text active:translate-y-px"
-            >
-              Browse lessons
-            </Link>
-          </div>
-        </div>
-
+    <div className="mt-16 border-t border-border pt-12 pb-10">
+      <section className="pb-4">
         {/* Crafted product mock: a real exchange — question, cited answer, and the
             source receipt beneath it. No photography (design-system rule). */}
-        <div className="relative mx-auto w-full max-w-md md:mx-0 md:justify-self-end">
+        <div className="relative mx-auto w-full max-w-md">
           {/* Rub el Hizb line geometry echoing the logo mark */}
           <svg
             viewBox="0 0 220 220"
@@ -577,94 +555,18 @@ export default function HomePage() {
         />
       )}
 
-      {!threadActive && <LandingPage />}
-
       {!threadActive && (
-        <>
-          <section id="ask" className="scroll-mt-8 border-t border-border pt-14 pb-8 text-center">
-            <p lang="ar" className="text-3xl text-accent/90">
-              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-            </p>
-            <h1 className="font-semibold tracking-tight mt-5 text-4xl text-text sm:text-5xl">
-              Ask, with sources.
-            </h1>
-            <p className="mx-auto mt-3 max-w-xl text-muted">
-              Ask anything. Answers come only from the Quran and authentic hadith, with
-              every claim cited.
-            </p>
-            <div className="mt-6 flex justify-center">
-              <MicButton
-                large
-                onText={(t) => setQuestion((q) => (q ? q.trimEnd() + " " : "") + t)}
-                onError={(m) => setError(m || null)}
-              />
-            </div>
-          </section>
-
-          <div className="mb-6">
-            <p className="mb-2 text-center text-xs tracking-wide text-muted/70">
-              I&apos;m learning as…
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {(personas.length ? personas : []).map((p) => {
-                const active = p.key === persona;
-                return (
-                  <button
-                    key={p.key}
-                    type="button"
-                    title={p.tagline}
-                    onClick={() => choosePersona(active ? null : (p.key as PersonaKey))}
-                    className={
-                      active
-                        ? "rounded-full border border-primary/60 bg-elevated px-3.5 py-1.5 text-xs text-accent"
-                        : "rounded-full border border-border px-3.5 py-1.5 text-xs text-muted hover:border-primary/60 hover:text-accent"
-                    }
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {reading && (
-            <Link
-              href={`/quran/${reading.surah}?page=${reading.page}`}
-              className="mb-6 block rounded-lg border border-border bg-surface p-4 transition-colors hover:border-primary/50 hover:bg-elevated"
-            >
-              <p className="text-xs tracking-wide text-accent">Continue reading</p>
-              <div className="mt-1 flex items-center justify-between gap-4">
-                <span className="font-semibold tracking-tight text-text">{reading.name}</span>
-                <span className="shrink-0 text-xs text-muted">
-                  {reading.page > 1 ? `from ayah ${(reading.page - 1) * 40 + 1}` : "from the beginning"} →
-                </span>
-              </div>
-            </Link>
-          )}
-
-          {continuePath && (
-            <Link
-              href={`/learn/${continuePath.key}`}
-              className="mb-6 block rounded-lg border border-border bg-surface p-4 transition-colors hover:border-primary/50 hover:bg-elevated"
-            >
-              <p className="text-xs tracking-wide text-accent">Continue learning</p>
-              <div className="mt-1 flex items-center justify-between gap-4">
-                <span className="font-semibold tracking-tight text-text">{continuePath.title}</span>
-                <span className="shrink-0 text-xs text-muted">
-                  {continuePath.completed_count}/{continuePath.step_count} studied
-                </span>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-bg">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{
-                    width: `${Math.round((continuePath.completed_count / continuePath.step_count) * 100)}%`,
-                  }}
-                />
-              </div>
-            </Link>
-          )}
-        </>
+        <section id="ask" className="pt-4 pb-8 text-center sm:pt-10">
+          <p lang="ar" className="text-2xl text-accent/90">
+            بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+          </p>
+          <h1 className="font-semibold tracking-tight mt-4 text-3xl text-text sm:text-4xl">
+            Ask, with sources.
+          </h1>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+            Answers come only from the Quran and authentic hadith, every claim cited.
+          </p>
+        </section>
       )}
 
       {threadActive && (
@@ -796,6 +698,16 @@ export default function HomePage() {
         </div>
       </form>
 
+      {!threadActive && (
+        <div className="mt-4 flex justify-center">
+          <MicButton
+            large
+            onText={(t) => setQuestion((q) => (q ? q.trimEnd() + " " : "") + t)}
+            onError={(m) => setError(m || null)}
+          />
+        </div>
+      )}
+
       {error && (
         <div className="mt-4 rounded-lg border border-error/40 bg-error/10 p-4 text-sm text-error">
           {error}
@@ -814,6 +726,75 @@ export default function HomePage() {
               {s}
             </button>
           ))}
+        </div>
+      )}
+
+      {!threadActive && personas.length > 0 && (
+        <div className="mt-8">
+          <p className="mb-2 text-center text-xs tracking-wide text-muted/70">
+            I&apos;m learning as…
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {personas.map((p) => {
+              const active = p.key === persona;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  title={p.tagline}
+                  onClick={() => choosePersona(active ? null : (p.key as PersonaKey))}
+                  className={
+                    active
+                      ? "rounded-full border border-primary/60 bg-elevated px-3.5 py-1.5 text-xs text-accent"
+                      : "rounded-full border border-border px-3.5 py-1.5 text-xs text-muted hover:border-primary/60 hover:text-accent"
+                  }
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!threadActive && (reading || continuePath) && (
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          {reading && (
+            <Link
+              href={`/quran/${reading.surah}?page=${reading.page}`}
+              className="block rounded-lg border border-border bg-surface p-4 transition-colors hover:border-primary/50 hover:bg-elevated"
+            >
+              <p className="text-xs tracking-wide text-accent">Continue reading</p>
+              <div className="mt-1 flex items-center justify-between gap-4">
+                <span className="font-semibold tracking-tight text-text">{reading.name}</span>
+                <span className="shrink-0 text-xs text-muted">
+                  {reading.page > 1 ? `from ayah ${(reading.page - 1) * 40 + 1}` : "from the beginning"} →
+                </span>
+              </div>
+            </Link>
+          )}
+          {continuePath && (
+            <Link
+              href={`/learn/${continuePath.key}`}
+              className="block rounded-lg border border-border bg-surface p-4 transition-colors hover:border-primary/50 hover:bg-elevated"
+            >
+              <p className="text-xs tracking-wide text-accent">Continue learning</p>
+              <div className="mt-1 flex items-center justify-between gap-4">
+                <span className="font-semibold tracking-tight text-text">{continuePath.title}</span>
+                <span className="shrink-0 text-xs text-muted">
+                  {continuePath.completed_count}/{continuePath.step_count} studied
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-bg">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{
+                    width: `${Math.round((continuePath.completed_count / continuePath.step_count) * 100)}%`,
+                  }}
+                />
+              </div>
+            </Link>
+          )}
         </div>
       )}
 
@@ -845,6 +826,8 @@ export default function HomePage() {
           </div>
         </section>
       )}
+
+      {!threadActive && <LandingPage />}
     </div>
   );
 }
