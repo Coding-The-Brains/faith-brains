@@ -22,6 +22,7 @@ import {
 import { sessionHeaders } from "@/lib/session";
 import { gradeTone } from "@/components/HadithCard";
 import { isSignedIn } from "@/lib/auth";
+import ListenButton from "@/components/ListenButton";
 import MicButton from "@/components/MicButton";
 import { loadReadingSpot, type ReadingSpot } from "@/components/ReadingTracker";
 import PersonaOnboarding from "@/components/PersonaOnboarding";
@@ -325,6 +326,11 @@ function AssistantMessage({ msg }: { msg: ChatMessage }) {
             </p>
           )}
           <AnswerBody text={msg.content} />
+          {msg.disclaimer !== undefined && (
+            <div className="mt-4">
+              <ListenButton text={msg.content} />
+            </div>
+          )}
           {msg.disclaimer && (
             <p className="mt-6 border-t border-border pt-3 text-xs text-muted">
               {msg.disclaimer}
@@ -586,6 +592,13 @@ export default function HomePage() {
               Ask anything. Answers come only from the Quran and authentic hadith, with
               every claim cited.
             </p>
+            <div className="mt-6 flex justify-center">
+              <MicButton
+                large
+                onText={(t) => setQuestion((q) => (q ? q.trimEnd() + " " : "") + t)}
+                onError={(m) => setError(m || null)}
+              />
+            </div>
           </section>
 
           <div className="mb-6">

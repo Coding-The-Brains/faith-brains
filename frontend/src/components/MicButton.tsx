@@ -11,9 +11,11 @@ const MAX_SECONDS = 60;
 export default function MicButton({
   onText,
   onError,
+  large = false,
 }: {
   onText: (text: string) => void;
   onError: (message: string) => void;
+  large?: boolean;
 }) {
   const [state, setState] = useState<MicState>("idle");
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -81,6 +83,48 @@ export default function MicButton({
   }
 
   const recording = state === "recording";
+
+  if (large) {
+    // The mom-friendly entry point: one big labeled button, speak and it types
+    return (
+      <button
+        type="button"
+        onClick={recording ? stop : state === "idle" ? start : undefined}
+        disabled={state === "busy"}
+        className={`inline-flex min-h-12 cursor-pointer items-center justify-center gap-3 rounded-full border px-6 py-3 text-base font-bold transition-colors duration-200 ${
+          recording
+            ? "border-primary bg-primary/15 text-primary"
+            : "border-primary/50 bg-accent-soft text-accent hover:border-primary"
+        } disabled:cursor-default disabled:opacity-60`}
+      >
+        {state === "busy" ? (
+          <svg viewBox="0 0 24 24" className="h-5 w-5 animate-spin" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M12 3a9 9 0 1 0 9 9" strokeLinecap="round" />
+          </svg>
+        ) : recording ? (
+          <span className="relative flex h-5 w-5 items-center justify-center" aria-hidden="true">
+            <span className="absolute h-full w-full animate-ping rounded-full bg-primary/40" />
+            <span className="relative h-3 w-3 rounded-sm bg-primary" />
+          </span>
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="9" y="2" width="6" height="12" rx="3" />
+            <path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4" />
+          </svg>
+        )}
+        {state === "busy" ? (
+          "Writing it down…"
+        ) : recording ? (
+          "Listening… tap when done"
+        ) : (
+          <>
+            Ask by voice · <span lang="ur">بول کر پوچھیں</span>
+          </>
+        )}
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
