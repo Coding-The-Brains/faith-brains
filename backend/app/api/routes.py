@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -583,81 +583,4 @@ async def search(
     )
 
 
-# --- admin (token-gated) ----------------------------------------------------
-
-
-async def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
-    configured = get_settings().admin_token
-    if not configured or configured == "change-me":
-        raise HTTPException(403, "Admin views are disabled — set a real ADMIN_TOKEN in .env")
-    if x_admin_token != configured:
-        raise HTTPException(401, "Invalid or missing X-Admin-Token header")
-
-
-@router.get(
-    "/admin/stats", response_model=schemas.AdminStatsOut, dependencies=[Depends(require_admin)]
-)
-async def admin_stats(session: AsyncSession = Depends(get_session)):
-    async def count(stmt) -> int:
-        return (await session.execute(stmt)).scalar() or 0
-
-    by_category_rows = (
-        await session.execute(
-            select(AskLog.category, func.count()).group_by(AskLog.category)
-        )
-    ).all()
-    avg_latency = (
-        await session.execute(select(func.avg(AskLog.latency_ms)).where(AskLog.status == "ok"))
-    ).scalar()
-    return schemas.AdminStatsOut(
-        verses=await count(select(func.count()).select_from(QuranVerse)),
-        hadiths=await count(select(func.count()).select_from(HadithRecord)),
-        quran_embeddings=await count(
-            select(func.count()).where(QuranTranslation.embedding.is_not(None))
-        ),
-        hadith_embeddings=await count(
-            select(func.count()).where(HadithRecord.embedding.is_not(None))
-        ),
-        asks_total=await count(select(func.count()).select_from(AskLog)),
-        asks_by_category={str(c or "error"): n for c, n in by_category_rows},
-        asks_errored=await count(select(func.count()).where(AskLog.status == "error")),
-        avg_latency_ms=float(avg_latency) if avg_latency is not None else None,
-    )
-
-
-@router.get(
-    "/admin/asks", response_model=schemas.AskLogListOut, dependencies=[Depends(require_admin)]
-)
-async def admin_asks(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    session: AsyncSession = Depends(get_session),
-):
-    total = (await session.execute(select(func.count()).select_from(AskLog))).scalar() or 0
-    rows = (
-        (
-            await session.execute(
-                select(AskLog).order_by(AskLog.created_at.desc()).offset(offset).limit(limit)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return schemas.AskLogListOut(
-        total=total,
-        items=[
-            schemas.AskLogOut(
-                id=r.id,
-                created_at=r.created_at.isoformat(),
-                question=r.question,
-                category=r.category,
-                answer=r.answer,
-                provider=r.provider,
-                model=r.model,
-                latency_ms=r.latency_ms,
-                status=r.status,
-                error=r.error,
-            )
-            for r in rows
-        ],
-    )
+# admin endpoints moved to app.api.admin_routes (role-based, not token-gated)

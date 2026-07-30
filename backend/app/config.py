@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     openai_answer_model: str = "gpt-5-mini"
     openai_classifier_model: str = "gpt-5-nano"
     openai_transcribe_model: str = "gpt-4o-mini-transcribe"
-    admin_token: str = "change-me"
 
     embedding_model: str = "voyage-4"
     embedding_dim: int = 1024

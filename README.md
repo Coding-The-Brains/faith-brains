@@ -75,9 +75,10 @@ curl -X POST http://localhost:8000/api/v1/ask `
 
 - Every `/ask` is logged to `ask_logs` (question, category, answer, source refs, provider/model,
   latency, errors) for quality review.
-- `GET /api/v1/admin/stats` and `GET /api/v1/admin/asks` require the `X-Admin-Token` header
-  matching `ADMIN_TOKEN` in `.env`; admin is disabled while the token is unset/default.
-  Frontend dashboard: `http://localhost:3000/admin`.
+- The admin panel (`http://localhost:3000/admin`) is gated by the `is_admin` role on the
+  signed-in account (`uv run python scripts/make_admin.py you@example.com` to grant it).
+  It covers usage stats, ask logs, notes pinned to verses/hadith, hadith add/correct,
+  and a user list under `/api/v1/admin/*`.
 - Rate limits (per IP, Postgres-backed — shared across workers, survive restarts): `/ask` 15/min,
   `/search` 60/min. Falls back to in-memory if the DB is unreachable. The semantic answer cache is
   Postgres-backed too (pgvector, `semantic_cache` table).

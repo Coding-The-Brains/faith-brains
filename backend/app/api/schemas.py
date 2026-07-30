@@ -293,6 +293,69 @@ class AdminStatsOut(BaseModel):
     asks_by_category: dict[str, int]
     asks_errored: int
     avg_latency_ms: float | None
+    users: int
+    notes: int
+
+
+class NoteIn(BaseModel):
+    kind: Literal["quran", "hadith"]
+    reference: str
+    body: str
+
+
+class NotePatch(BaseModel):
+    body: str
+
+
+class NoteOut(BaseModel):
+    id: int
+    kind: str
+    reference: str
+    body: str
+    created_at: str
+    updated_at: str
+
+
+class AdminUserOut(BaseModel):
+    id: int
+    email: str
+    created_at: str
+    is_admin: bool
+    conversations: int
+    saved: int
+
+
+class AdminCollectionOut(BaseModel):
+    key: str
+    name: str
+    count: int
+
+
+class AdminHadithIn(BaseModel):
+    collection_key: str
+    hadith_number: str
+    text_english: str
+    text_arabic: str | None = None
+    book_name: str | None = None
+    grade: str | None = None  # stored as a single grading entry
+
+
+class AdminHadithPatch(BaseModel):
+    text_english: str | None = None
+    text_arabic: str | None = None
+    book_name: str | None = None
+    grade: str | None = None
+
+
+class AdminHadithOut(BaseModel):
+    id: int
+    collection_key: str
+    collection_name: str
+    hadith_number: str
+    book_name: str | None
+    text_english: str | None
+    text_arabic: str | None
+    grade: str | None
 
 
 class AuthIn(BaseModel):
@@ -302,6 +365,7 @@ class AuthIn(BaseModel):
 
 class MeOut(BaseModel):
     email: str
+    is_admin: bool = False
 
 
 class ForgotIn(BaseModel):

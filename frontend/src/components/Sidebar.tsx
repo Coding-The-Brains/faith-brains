@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { me } from "@/lib/auth";
 
 const STROKE = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
@@ -38,12 +39,13 @@ const NAV = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [email, setEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    fetch("/api/v1/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((me) => setEmail(me?.email ?? null))
-      .catch(() => {});
+    me().then((m) => {
+      setEmail(m?.email ?? null);
+      setIsAdmin(m?.is_admin ?? false);
+    });
   }, []);
 
   return (
@@ -83,9 +85,28 @@ export default function Sidebar() {
         })}
       </nav>
 
+      {isAdmin && (
+        <Link
+          href="/admin"
+          className={`mt-auto flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${
+            pathname.startsWith("/admin")
+              ? "bg-elevated text-accent"
+              : "text-muted hover:bg-elevated hover:text-text"
+          }`}
+        >
+          <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 shrink-0" aria-hidden="true">
+            <path
+              {...STROKE}
+              d="M12 3l7 3v5c0 4.4-3 8.3-7 10-4-1.7-7-5.6-7-10V6l7-3ZM9.5 12l2 2 3.5-4"
+            />
+          </svg>
+          Admin
+        </Link>
+      )}
+
       <Link
         href="/account"
-        className={`mt-auto flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${
+        className={`${isAdmin ? "" : "mt-auto "}flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${
           pathname.startsWith("/account")
             ? "bg-elevated text-accent"
             : "text-muted hover:bg-elevated hover:text-text"

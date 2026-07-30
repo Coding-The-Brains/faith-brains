@@ -31,7 +31,7 @@ Free-tier caveats: Render sleeps after ~15 min idle (first request wakes it in
 1. Dashboard → New + → **Blueprint** → select the GitHub repo
    (`render.yaml` at the repo root defines the service).
 2. Fill the prompted env vars: `DATABASE_URL` (the `+asyncpg` Neon URL),
-   `OPENAI_API_KEY`, `VOYAGE_API_KEY`, `ADMIN_TOKEN` (long random string),
+   `OPENAI_API_KEY`, `VOYAGE_API_KEY`,
    `CORS_ORIGINS` (the Vercel URL once known).
 3. Deploy. The container runs `alembic upgrade head` on boot, so schema is
    always current. Verify `https://<service>.onrender.com/api/v1/health`.

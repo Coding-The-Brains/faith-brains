@@ -1,0 +1,420 @@
+"""In-app admin panel API: content management and user support.
+
+Access is a role on the account (users.is_admin), not a shared token — the
+admin signs in like anyone else and the httpOnly session cookie carries the
+permission. Everything here is invisible to non-admin accounts (403).
+"""
+
+import re
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api import schemas
+from app.api.auth_routes import current_user
+from app.db.engine import get_session
+from app.db.models import (
+    AskLog,
+    ContentNote,
+    Conversation,
+    HadithCollection,
+    HadithRecord,
+    Learner,
+    QuranTranslation,
+    QuranVerse,
+    SavedItem,
+    User,
+)
+from app.retrieval.arabic import normalize_arabic
+
+router = APIRouter(prefix="/admin")
+
+_QURAN_REF = re.compile(r"^(\d{1,3})\s*:\s*(\d{1,3})$")
+_HADITH_REF = re.compile(r"^([a-z]+)\s+(\S+)$")
+
+
+async def require_admin(
+    user: User | None = Depends(current_user),
+) -> User:
+    if user is None:
+        raise HTTPException(401, "Not signed in.")
+    if not user.is_admin:
+        raise HTTPException(403, "This account does not have admin access.")
+    return user
+
+
+# --- overview ----------------------------------------------------------------
+
+
+@router.get("/overview", response_model=schemas.AdminStatsOut, dependencies=[Depends(require_admin)])
+async def overview(session: AsyncSession = Depends(get_session)):
+    async def count(stmt) -> int:
+        return (await session.execute(stmt)).scalar() or 0
+
+    by_category_rows = (
+        await session.execute(select(AskLog.category, func.count()).group_by(AskLog.category))
+    ).all()
+    avg_latency = (
+        await session.execute(select(func.avg(AskLog.latency_ms)).where(AskLog.status == "ok"))
+    ).scalar()
+    return schemas.AdminStatsOut(
+        verses=await count(select(func.count()).select_from(QuranVerse)),
+        hadiths=await count(select(func.count()).select_from(HadithRecord)),
+        quran_embeddings=await count(
+            select(func.count()).where(QuranTranslation.embedding.is_not(None))
+        ),
+        hadith_embeddings=await count(
+            select(func.count()).where(HadithRecord.embedding.is_not(None))
+        ),
+        asks_total=await count(select(func.count()).select_from(AskLog)),
+        asks_by_category={str(c or "error"): n for c, n in by_category_rows},
+        asks_errored=await count(select(func.count()).where(AskLog.status == "error")),
+        avg_latency_ms=float(avg_latency) if avg_latency is not None else None,
+        users=await count(select(func.count()).select_from(User)),
+        notes=await count(select(func.count()).select_from(ContentNote)),
+    )
+
+
+@router.get("/asks", response_model=schemas.AskLogListOut, dependencies=[Depends(require_admin)])
+async def asks(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+):
+    total = (await session.execute(select(func.count()).select_from(AskLog))).scalar() or 0
+    rows = (
+        (
+            await session.execute(
+                select(AskLog).order_by(AskLog.created_at.desc()).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return schemas.AskLogListOut(
+        total=total,
+        items=[
+            schemas.AskLogOut(
+                id=r.id,
+                created_at=r.created_at.isoformat(),
+                question=r.question,
+                category=r.category,
+                answer=r.answer,
+                provider=r.provider,
+                model=r.model,
+                latency_ms=r.latency_ms,
+                status=r.status,
+                error=r.error,
+            )
+            for r in rows
+        ],
+    )
+
+
+# --- users (support view) -----------------------------------------------------
+
+
+@router.get("/users", response_model=list[schemas.AdminUserOut], dependencies=[Depends(require_admin)])
+async def users(session: AsyncSession = Depends(get_session)):
+    conv_counts = dict(
+        (
+            await session.execute(
+                select(Learner.user_id, func.count(Conversation.id))
+                .join(Conversation, Conversation.learner_id == Learner.id)
+                .where(Learner.user_id.is_not(None))
+                .group_by(Learner.user_id)
+            )
+        ).all()
+    )
+    saved_counts = dict(
+        (
+            await session.execute(
+                select(Learner.user_id, func.count(SavedItem.id))
+                .join(SavedItem, SavedItem.learner_id == Learner.id)
+                .where(Learner.user_id.is_not(None))
+                .group_by(Learner.user_id)
+            )
+        ).all()
+    )
+    rows = (
+        (await session.execute(select(User).order_by(User.created_at.desc()))).scalars().all()
+    )
+    return [
+        schemas.AdminUserOut(
+            id=u.id,
+            email=u.email,
+            created_at=u.created_at.isoformat(),
+            is_admin=u.is_admin,
+            conversations=conv_counts.get(u.id, 0),
+            saved=saved_counts.get(u.id, 0),
+        )
+        for u in rows
+    ]
+
+
+# --- notes pinned to references ------------------------------------------------
+
+
+async def _validate_reference(session: AsyncSession, kind: str, reference: str) -> str:
+    """Normalize to canonical form and confirm the target exists."""
+    ref = " ".join(reference.strip().lower().split())
+    if kind == "quran":
+        m = _QURAN_REF.match(ref)
+        if not m:
+            raise HTTPException(400, "Quran reference must look like 2:255.")
+        ref = f"{int(m.group(1))}:{int(m.group(2))}"
+        exists = (
+            await session.execute(
+                select(QuranVerse.id).where(
+                    QuranVerse.surah_number == int(m.group(1)),
+                    QuranVerse.ayah_number == int(m.group(2)),
+                )
+            )
+        ).scalar_one_or_none()
+        if exists is None:
+            raise HTTPException(404, f"Verse {ref} does not exist.")
+        return ref
+    m = _HADITH_REF.match(ref)
+    if not m:
+        raise HTTPException(400, "Hadith reference must look like: bukhari 6018.")
+    exists = (
+        await session.execute(
+            select(HadithRecord.id)
+            .join(HadithCollection, HadithRecord.collection_id == HadithCollection.id)
+            .where(
+                HadithCollection.key == m.group(1),
+                HadithRecord.hadith_number == m.group(2),
+            )
+        )
+    ).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(404, f"No hadith found for '{ref}'.")
+    return ref
+
+
+def _note_out(n: ContentNote) -> schemas.NoteOut:
+    return schemas.NoteOut(
+        id=n.id,
+        kind=n.kind,
+        reference=n.reference,
+        body=n.body,
+        created_at=n.created_at.isoformat(),
+        updated_at=n.updated_at.isoformat(),
+    )
+
+
+@router.get("/notes", response_model=list[schemas.NoteOut], dependencies=[Depends(require_admin)])
+async def list_notes(session: AsyncSession = Depends(get_session)):
+    rows = (
+        (
+            await session.execute(
+                select(ContentNote).order_by(ContentNote.updated_at.desc()).limit(200)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [_note_out(n) for n in rows]
+
+
+@router.post("/notes", response_model=schemas.NoteOut)
+async def create_note(
+    body: schemas.NoteIn,
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    text = body.body.strip()
+    if not text:
+        raise HTTPException(400, "The note text is empty.")
+    ref = await _validate_reference(session, body.kind, body.reference)
+    note = ContentNote(kind=body.kind, reference=ref, body=text, created_by=admin.id)
+    session.add(note)
+    await session.commit()
+    await session.refresh(note)
+    return _note_out(note)
+
+
+@router.patch("/notes/{note_id}", response_model=schemas.NoteOut, dependencies=[Depends(require_admin)])
+async def update_note(
+    note_id: int,
+    body: schemas.NotePatch,
+    session: AsyncSession = Depends(get_session),
+):
+    note = (
+        await session.execute(select(ContentNote).where(ContentNote.id == note_id))
+    ).scalar_one_or_none()
+    if note is None:
+        raise HTTPException(404, "Note not found.")
+    text = body.body.strip()
+    if not text:
+        raise HTTPException(400, "The note text is empty.")
+    note.body = text
+    note.updated_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(note)
+    return _note_out(note)
+
+
+@router.delete("/notes/{note_id}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_note(note_id: int, session: AsyncSession = Depends(get_session)):
+    note = (
+        await session.execute(select(ContentNote).where(ContentNote.id == note_id))
+    ).scalar_one_or_none()
+    if note is None:
+        raise HTTPException(404, "Note not found.")
+    await session.delete(note)
+    await session.commit()
+
+
+# --- hadith entries (add and correct) -------------------------------------------
+
+
+def _hadith_out(r: HadithRecord, collection: HadithCollection) -> schemas.AdminHadithOut:
+    grade = None
+    if r.gradings:
+        grade = r.gradings[0].get("grade")
+    return schemas.AdminHadithOut(
+        id=r.id,
+        collection_key=collection.key,
+        collection_name=collection.name_english,
+        hadith_number=r.hadith_number,
+        book_name=r.book_name,
+        text_english=r.text_english,
+        text_arabic=r.text_arabic,
+        grade=grade,
+    )
+
+
+@router.get(
+    "/hadith/collections",
+    response_model=list[schemas.AdminCollectionOut],
+    dependencies=[Depends(require_admin)],
+)
+async def collections(session: AsyncSession = Depends(get_session)):
+    rows = (
+        await session.execute(
+            select(HadithCollection, func.count(HadithRecord.id))
+            .outerjoin(HadithRecord, HadithRecord.collection_id == HadithCollection.id)
+            .group_by(HadithCollection.id)
+            .order_by(HadithCollection.id)
+        )
+    ).all()
+    return [
+        schemas.AdminCollectionOut(key=c.key, name=c.name_english, count=n) for c, n in rows
+    ]
+
+
+@router.get(
+    "/hadith/find",
+    response_model=list[schemas.AdminHadithOut],
+    dependencies=[Depends(require_admin)],
+)
+async def find_hadith(
+    q: str = Query(..., min_length=1, max_length=200),
+    collection: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+):
+    stmt = (
+        select(HadithRecord, HadithCollection)
+        .join(HadithCollection, HadithRecord.collection_id == HadithCollection.id)
+        .limit(20)
+    )
+    if collection:
+        stmt = stmt.where(HadithCollection.key == collection)
+    q = q.strip()
+    if re.fullmatch(r"\d+[a-z]?", q.lower()):
+        stmt = stmt.where(HadithRecord.hadith_number == q.lower())
+    else:
+        stmt = stmt.where(HadithRecord.text_english.ilike(f"%{q}%"))
+    rows = (await session.execute(stmt)).all()
+    return [_hadith_out(r, c) for r, c in rows]
+
+
+@router.post("/hadith", response_model=schemas.AdminHadithOut)
+async def add_hadith(
+    body: schemas.AdminHadithIn,
+    admin: User = Depends(require_admin),  # noqa: ARG001 — auth gate
+    session: AsyncSession = Depends(get_session),
+):
+    collection = (
+        await session.execute(
+            select(HadithCollection).where(HadithCollection.key == body.collection_key)
+        )
+    ).scalar_one_or_none()
+    if collection is None:
+        raise HTTPException(404, "Unknown collection.")
+    number = body.hadith_number.strip().lower()
+    if not number:
+        raise HTTPException(400, "A hadith number is required.")
+    if not body.text_english.strip():
+        raise HTTPException(400, "The English text is empty.")
+    duplicate = (
+        await session.execute(
+            select(HadithRecord.id).where(
+                HadithRecord.collection_id == collection.id,
+                HadithRecord.hadith_number == number,
+            )
+        )
+    ).scalar_one_or_none()
+    if duplicate is not None:
+        raise HTTPException(409, f"{collection.name_english} {number} already exists. Edit it instead.")
+    arabic = (body.text_arabic or "").strip() or None
+    record = HadithRecord(
+        collection_id=collection.id,
+        hadith_number=number,
+        book_name=(body.book_name or "").strip() or None,
+        text_english=body.text_english.strip(),
+        text_arabic=arabic,
+        text_arabic_normalized=normalize_arabic(arabic) if arabic else None,
+        gradings=[{"name": "Added by admin", "grade": body.grade.strip()}] if body.grade else [],
+        reference_schemes={},
+        # ponytail: embedding left empty — the entry is findable by reference and
+        # keyword search immediately; vector search picks it up on the next embed run
+    )
+    session.add(record)
+    await session.commit()
+    await session.refresh(record)
+    return _hadith_out(record, collection)
+
+
+@router.patch(
+    "/hadith/{record_id}",
+    response_model=schemas.AdminHadithOut,
+    dependencies=[Depends(require_admin)],
+)
+async def edit_hadith(
+    record_id: int,
+    body: schemas.AdminHadithPatch,
+    session: AsyncSession = Depends(get_session),
+):
+    row = (
+        await session.execute(
+            select(HadithRecord, HadithCollection)
+            .join(HadithCollection, HadithRecord.collection_id == HadithCollection.id)
+            .where(HadithRecord.id == record_id)
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(404, "Hadith not found.")
+    record, collection = row
+    if body.text_english is not None:
+        if not body.text_english.strip():
+            raise HTTPException(400, "The English text is empty.")
+        record.text_english = body.text_english.strip()
+        # the corrected text must be re-embedded before vector search reflects it
+        record.embedding = None
+    if body.text_arabic is not None:
+        arabic = body.text_arabic.strip() or None
+        record.text_arabic = arabic
+        record.text_arabic_normalized = normalize_arabic(arabic) if arabic else None
+    if body.book_name is not None:
+        record.book_name = body.book_name.strip() or None
+    if body.grade is not None:
+        record.gradings = (
+            [{"name": "Corrected by admin", "grade": body.grade.strip()}] if body.grade.strip() else []
+        )
+    await session.commit()
+    await session.refresh(record)
+    return _hadith_out(record, collection)

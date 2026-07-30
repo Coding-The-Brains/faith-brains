@@ -15,8 +15,6 @@ services:
         sync: false
       - key: VOYAGE_API_KEY        # query embeddings for hybrid search
         sync: false
-      - key: ADMIN_TOKEN           # long random string; admin API is disabled if left unset
-        sync: false
       - key: CORS_ORIGINS          # e.g. https://faithbrains.vercel.app
         sync: false
       - key: EMBEDDING_PROVIDER

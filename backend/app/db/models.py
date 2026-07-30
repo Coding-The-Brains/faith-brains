@@ -244,6 +244,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.text("now()")
     )
+    # Grants the in-app admin panel (content management, user support)
+    is_admin: Mapped[bool] = mapped_column(sa.Boolean, server_default=sa.text("false"))
 
 
 class AuthToken(Base):
@@ -272,6 +274,29 @@ class PasswordReset(Base):
     user_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("users.id"))
     expires_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.text("now() + interval '1 hour'")
+    )
+
+
+class ContentNote(Base):
+    """Admin-written note pinned to a Quran verse or hadith reference.
+
+    Surfaces wherever that reference appears (reader, answers). References are
+    canonical lowercase: "2:255" for Quran, "bukhari 6018" for hadith.
+    """
+
+    __tablename__ = "content_notes"
+    __table_args__ = (sa.Index("ix_content_notes_ref", "kind", "reference"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(sa.Text)  # quran | hadith
+    reference: Mapped[str] = mapped_column(sa.Text)
+    body: Mapped[str] = mapped_column(sa.Text)
+    created_by: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
     )
 
 

@@ -193,7 +193,7 @@ async def login(
     elif learner.user_id is None:
         await _merge_learners(session, learner, primary)
     await _start_session(session, user, response)
-    return schemas.MeOut(email=email)
+    return schemas.MeOut(email=email, is_admin=user.is_admin)
 
 
 @router.post("/logout", status_code=204, dependencies=[Depends(limit_auth)])
@@ -225,7 +225,7 @@ async def logout_all(
 async def me(user: User | None = Depends(current_user)):
     if user is None:
         raise HTTPException(401, "Not signed in.")
-    return schemas.MeOut(email=user.email)
+    return schemas.MeOut(email=user.email, is_admin=user.is_admin)
 
 
 @router.post("/forgot", status_code=204, dependencies=[Depends(limit_auth)])
