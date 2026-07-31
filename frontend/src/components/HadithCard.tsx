@@ -2,13 +2,14 @@ import SaveButton from "@/components/SaveButton";
 import ShareButton from "@/components/ShareButton";
 import type { Grading } from "@/lib/api";
 
+// Text tone only: gradings render as quiet mono labels, never as pills
+// (product rule: no decorative badges).
 export function gradeTone(grade: string | null): string {
   const g = (grade ?? "").toLowerCase();
-  if (g.includes("sahih")) return "bg-success/15 text-success";
-  if (g.includes("hasan")) return "bg-warn/15 text-warn";
-  if (g.includes("daif") || g.includes("da'if") || g.includes("weak"))
-    return "bg-error/15 text-error";
-  return "bg-elevated text-muted";
+  if (g.includes("sahih")) return "text-success";
+  if (g.includes("hasan")) return "text-warn";
+  if (g.includes("daif") || g.includes("da'if") || g.includes("weak")) return "text-error";
+  return "text-muted";
 }
 
 export default function HadithCard({
@@ -57,9 +58,12 @@ export default function HadithCard({
         </p>
       )}
       {shown.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1">
           {shown.map((g, i) => (
-            <span key={i} className={`rounded-full px-2.5 py-0.5 text-xs ${gradeTone(g.grade)}`}>
+            <span
+              key={i}
+              className={`font-mono text-[10px] uppercase tracking-[0.15em] ${gradeTone(g.grade)}`}
+            >
               {g.grade}
               {g.name ? ` · ${g.name}` : ""}
             </span>

@@ -50,7 +50,19 @@ export default function SavedPage() {
     });
   }, []);
 
-  if (signedIn === null) return null;
+  // Skeleton while auth + the saved list resolve: a blank page reads as broken
+  if (signedIn === null || (signedIn && rows === null)) {
+    return (
+      <div className="mx-auto max-w-3xl" aria-busy="true">
+        <div className="h-9 w-40 animate-pulse rounded bg-elevated" />
+        <div className="mt-6 space-y-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-28 animate-pulse rounded-lg border border-border bg-surface" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!signedIn) {
     return (
@@ -69,7 +81,7 @@ export default function SavedPage() {
     );
   }
 
-  if (rows === null) return null;
+  if (rows === null) return null; // unreachable: skeleton above covers it
 
   async function remove(row: Row) {
     setRows((r) => (r ?? []).filter((x) => x.id !== row.id));

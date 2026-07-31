@@ -48,7 +48,7 @@ export default function NextUp() {
     <div className="mb-8 rounded-lg border border-primary/30 bg-surface p-5">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold tracking-tight text-xl text-text">Next up for you</h2>
-        <span className="text-[10px] uppercase tracking-wide text-muted/60">
+        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
           {rec.source === "ai" ? "based on your questions" : "based on your level"}
         </span>
       </div>

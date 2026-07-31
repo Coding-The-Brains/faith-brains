@@ -63,15 +63,15 @@ async def classify(question: str, chat: ChatProvider) -> Classification:
 
 CRISIS_RESPONSE = (
     "I'm really sorry you're going through this. I'm an educational tool and not able to "
-    "give you the support you deserve right now — please reach out to someone who can: "
+    "give you the support you deserve right now. Please reach out to someone who can: "
     "contact your local emergency services or a crisis helpline in your country, or speak "
     "to a trusted person, imam, or counselor right away. You matter, and you don't have to "
     "carry this alone. The Quran reminds us that \"Allah does not burden a soul beyond that "
-    "it can bear\" (2:286) — and seeking help is itself an act of strength and faith."
+    "it can bear\" (2:286), and seeking help is itself an act of strength and faith."
 )
 
 OUT_OF_SCOPE_RESPONSE = (
-    "I'm FaithBrains, an educational assistant for learning about Islam — the Quran, Hadith, "
+    "I'm FaithBrains, an educational assistant for learning about Islam: the Quran, Hadith, "
     "and Islamic knowledge. That question is outside what I can help with. Feel free to ask "
     "me anything about the Quran, authentic hadith, or Islamic teachings."
 )

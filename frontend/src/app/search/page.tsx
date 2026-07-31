@@ -22,7 +22,8 @@ export default async function SearchPage({
           name="q"
           defaultValue={query}
           placeholder="Search a topic, a phrase, 2:255, bukhari 6018, or Arabic"
-          className="w-full rounded-full border border-border bg-surface px-5 py-2.5 text-text placeholder:text-muted/60"
+          aria-label="Search the Quran and hadith"
+          className="w-full rounded-full border border-border bg-surface px-5 py-2.5 text-text placeholder:text-muted"
         />
         <button type="submit" className="rounded-full bg-primary px-6 text-sm font-bold text-on-primary">
           Search
@@ -32,7 +33,8 @@ export default async function SearchPage({
       {outcome && (
         <>
           <p className="mb-5 text-xs text-muted">
-            {outcome.results.length} results · matched by{" "}
+            {outcome.results.length} {outcome.results.length === 1 ? "result" : "results"} ·
+            matched by{" "}
             {outcome.mode === "reference" ? "exact reference" : outcome.signals_used.join(" + ")}
           </p>
           {outcome.results.length === 0 && (

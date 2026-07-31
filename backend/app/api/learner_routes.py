@@ -393,6 +393,10 @@ async def complete_step(
     learner: Learner = Depends(get_learner),
     session: AsyncSession = Depends(get_session),
 ):
+    if learner.user_id is None:
+        # Product rule: progress belongs to an account. The UI gates this too,
+        # but the client-side check alone was bypassable with a bare session id.
+        raise HTTPException(401, "Sign in to save your progress.")
     p = PATHS_BY_KEY.get(path_key)
     valid = {s["key"] for s in p["steps"]} | ({"quiz"} if QUIZZES.get(path_key) else set()) if p else set()
     if p is None or step_key not in valid:

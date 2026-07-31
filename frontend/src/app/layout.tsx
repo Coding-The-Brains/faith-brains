@@ -23,11 +23,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="min-h-screen flex flex-col">
+        <a href="#main" className="skip-link">
+          Skip to content
+        </a>
         <ThemeProvider>
           <AppShell>
             <SiteHeader />
 
-            <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
+            <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
 
             <footer className="border-t border-border py-6 text-center text-xs text-muted">
               <p className="mx-auto max-w-3xl px-4">

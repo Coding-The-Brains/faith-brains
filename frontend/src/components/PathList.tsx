@@ -66,16 +66,16 @@ export default function PathList() {
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-semibold tracking-tight text-lg text-text">{p.title}</h3>
               {p.completed_count > 0 && p.completed_count < p.step_count ? (
-                <span className="mt-1 shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold tracking-wide text-on-primary">
-                  Continue
+                <span className="mt-1.5 shrink-0 font-mono text-[10px] uppercase tracking-[0.15em] text-accent">
+                  Continue →
                 </span>
               ) : p.completed_count === p.step_count && p.step_count > 0 ? (
-                <span className="mt-1 shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] tracking-wide text-muted/70">
+                <span className="mt-1.5 shrink-0 font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
                   ✓ Completed
                 </span>
               ) : recommended.has(p.key) ? (
-                <span className="mt-1 shrink-0 rounded-full border border-primary/40 px-2 py-0.5 text-[10px] tracking-wide text-accent">
-                  Recommended for you
+                <span className="mt-1.5 shrink-0 font-mono text-[10px] uppercase tracking-[0.15em] text-accent">
+                  For you
                 </span>
               ) : null}
             </div>
@@ -84,7 +84,7 @@ export default function PathList() {
               <div className="h-1.5 overflow-hidden rounded-full bg-bg">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
               </div>
-              <p className="mt-1.5 text-xs text-muted/80">
+              <p className="mt-1.5 text-xs text-muted">
                 {p.completed_count}/{p.step_count} studied
               </p>
             </div>

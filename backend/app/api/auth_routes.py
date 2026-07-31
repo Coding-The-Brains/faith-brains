@@ -11,14 +11,16 @@ import hashlib
 import logging
 import re
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response
 from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import schemas
-from app.api.learner_routes import get_learner
+from app.api.learner_routes import _SESSION_RE
 from app.api.ratelimit import email_limiter, limit_auth
 from app.config import get_settings
 from app.db.engine import get_session
@@ -81,6 +83,43 @@ async def current_user(
             .where(AuthToken.token == token, AuthToken.expires_at > datetime.now(UTC))
         )
     ).scalar_one_or_none()
+
+
+async def device_learner(
+    x_session_id: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Learner | None:
+    """THIS device's anonymous learner, by session header only.
+
+    Register/login must never resolve the learner through a cookie: a stale
+    signed-in cookie would hand them ANOTHER account's learner, and the new
+    account would be created with no learner at all (its data landing on an
+    orphan). Returns None when there is no session header or the session's
+    learner is already claimed — callers then mint a fresh learner instead.
+    """
+    if not x_session_id or not _SESSION_RE.fullmatch(x_session_id):
+        return None
+    learner = (
+        await session.execute(select(Learner).where(Learner.session_id == x_session_id))
+    ).scalar_one_or_none()
+    if learner is None:
+        await session.execute(
+            pg_insert(Learner)
+            .values(session_id=x_session_id)
+            .on_conflict_do_nothing(index_elements=["session_id"])
+        )
+        learner = (
+            await session.execute(select(Learner).where(Learner.session_id == x_session_id))
+        ).scalar_one()
+    if learner.user_id is not None:
+        return None  # belongs to some account already; nothing to claim or merge
+    return learner
+
+
+def _fresh_learner(user_id: int) -> Learner:
+    """A learner minted for an account that has none (API clients, stale-cookie
+    registrations). The synthetic session id is never handed to a browser."""
+    return Learner(session_id=str(uuid.uuid4()), user_id=user_id)
 
 
 async def _primary_learner(session: AsyncSession, user: User) -> Learner | None:
@@ -153,7 +192,7 @@ async def _start_session(session: AsyncSession, user: User, response: Response) 
 async def register(
     body: schemas.AuthIn,
     response: Response,
-    learner: Learner = Depends(get_learner),
+    learner: Learner | None = Depends(device_learner),
     session: AsyncSession = Depends(get_session),
 ):
     email = body.email.strip().lower()
@@ -167,17 +206,19 @@ async def register(
     user = User(email=email, password_hash=_hash_password(body.password))
     session.add(user)
     await session.flush()
-    if learner.user_id is None:
+    if learner is not None:
         learner.user_id = user.id  # this device's data becomes the account's data
+    else:
+        session.add(_fresh_learner(user.id))  # every account owns a learner from birth
     await _start_session(session, user, response)
-    return schemas.MeOut(email=email)
+    return schemas.MeOut(email=email, is_admin=user.is_admin)
 
 
 @router.post("/login", response_model=schemas.MeOut, dependencies=[Depends(limit_auth)])
 async def login(
     body: schemas.AuthIn,
     response: Response,
-    learner: Learner = Depends(get_learner),
+    learner: Learner | None = Depends(device_learner),
     session: AsyncSession = Depends(get_session),
 ):
     email = body.email.strip().lower()
@@ -188,9 +229,11 @@ async def login(
         raise HTTPException(401, "Wrong email or password.")
     primary = await _primary_learner(session, user)
     if primary is None:
-        if learner.user_id is None:
+        if learner is not None:
             learner.user_id = user.id
-    elif learner.user_id is None:
+        else:
+            session.add(_fresh_learner(user.id))
+    elif learner is not None:
         await _merge_learners(session, learner, primary)
     await _start_session(session, user, response)
     return schemas.MeOut(email=email, is_admin=user.is_admin)

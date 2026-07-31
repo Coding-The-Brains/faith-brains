@@ -284,6 +284,12 @@ class ConversationDetailOut(BaseModel):
     messages: list[MessageOut]
 
 
+class AskDayOut(BaseModel):
+    day: str  # YYYY-MM-DD
+    count: int
+    errors: int
+
+
 class AdminStatsOut(BaseModel):
     verses: int
     hadiths: int
@@ -295,6 +301,8 @@ class AdminStatsOut(BaseModel):
     avg_latency_ms: float | None
     users: int
     notes: int
+    asks_by_day: list[AskDayOut]  # last 14 days, oldest first, gaps zero-filled
+    new_users_7d: int
 
 
 class NoteIn(BaseModel):

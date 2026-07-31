@@ -49,7 +49,8 @@ export default function SiteHeader() {
           </svg>
           <span
             className={`overflow-hidden whitespace-nowrap text-2xl font-semibold tracking-tight text-text transition-all duration-500 ${EASE} ${
-              condensed ? "max-w-0 opacity-0" : "max-w-[12rem] opacity-100"
+              // phones never show the wordmark: the nav tabs need that room
+              condensed ? "max-w-0 opacity-0" : "max-w-0 opacity-0 sm:max-w-[12rem] sm:opacity-100"
             }`}
           >
             Faith<span className="text-accent">Brains</span>
@@ -57,7 +58,7 @@ export default function SiteHeader() {
         </Link>
 
         {/* On xl the signed-in sidebar carries the nav; the header keeps it elsewhere */}
-        <div className={`no-scrollbar min-w-0 overflow-x-auto ${signedIn ? "xl:hidden" : ""}`}>
+        <div className={`no-scrollbar min-w-0 flex-1 overflow-x-auto ${signedIn ? "xl:hidden" : ""}`}>
           <NavTabs variant="pill" />
         </div>
 
@@ -84,7 +85,8 @@ export default function SiteHeader() {
                 name="q"
                 placeholder="Search"
                 tabIndex={condensed ? -1 : 0}
-                className="w-44 rounded-full border border-border bg-surface px-4 py-1.5 text-sm text-text placeholder:text-muted/70 transition-colors duration-200 focus:border-primary"
+                aria-label="Search the Quran and hadith"
+                className="w-44 rounded-full border border-border bg-surface px-4 py-1.5 text-sm text-text placeholder:text-muted transition-colors duration-200 focus:border-primary"
               />
             </form>
           </div>

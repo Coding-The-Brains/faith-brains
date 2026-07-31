@@ -22,7 +22,7 @@ import {
 import { sessionHeaders } from "@/lib/session";
 import { gradeTone } from "@/components/HadithCard";
 import { isSignedIn } from "@/lib/auth";
-import { handsFreeEnabled, speakText } from "@/lib/tts";
+import { handsFreeEnabled, liveSpeech } from "@/lib/tts";
 import ListenButton from "@/components/ListenButton";
 import MicButton from "@/components/MicButton";
 import { loadReadingSpot, type ReadingSpot } from "@/components/ReadingTracker";
@@ -196,7 +196,7 @@ function SourceCard({ n, s }: { n: number; s: SearchResult }) {
           )}
         </p>
         {isQuran && s.revelation_place && (
-          <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted/70">
+          <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
             {s.revelation_place}
           </span>
         )}
@@ -204,7 +204,7 @@ function SourceCard({ n, s }: { n: number; s: SearchResult }) {
           (s.gradings ?? []).slice(0, 2).map((g, i) => (
             <span
               key={i}
-              className={`rounded-full px-2 py-0.5 text-[10px] ${gradeTone(g.grade)}`}
+              className={`font-mono text-[10px] uppercase tracking-[0.15em] ${gradeTone(g.grade)}`}
               title={g.name ? `Graded by ${g.name}` : undefined}
             >
               {g.grade}
@@ -213,13 +213,13 @@ function SourceCard({ n, s }: { n: number; s: SearchResult }) {
           ))}
       </div>
       {!isQuran && s.narrator && (
-        <p className="mt-1.5 text-[11px] text-muted/70">Narrator: {s.narrator}</p>
+        <p className="mt-1.5 text-[11px] text-muted">Narrator: {s.narrator}</p>
       )}
       <p className="mt-2 text-sm leading-relaxed text-text/90">
         {isQuran ? s.translation : s.english}
       </p>
       {isQuran && s.translation_source && (
-        <p className="mt-1 text-[11px] text-muted/60">Translation: {s.translation_source}</p>
+        <p className="mt-1 text-[11px] text-muted">Translation: {s.translation_source}</p>
       )}
       {s.arabic && (
         <p lang="ar" className="mt-2 text-right text-lg leading-[2] text-text/80">
@@ -300,7 +300,7 @@ function AssistantMessage({ msg }: { msg: ChatMessage }) {
         <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
         <div className="p-5 sm:p-6">
           {msg.category && (
-            <p className="mb-4 inline-block rounded-full border border-primary/40 px-3 py-0.5 text-xs tracking-wide text-accent">
+            <p className="eyebrow mb-4 text-accent" style={{ color: "var(--accent)" }}>
               {CATEGORY_LABEL[msg.category]}
             </p>
           )}
@@ -371,19 +371,22 @@ export default function HomePage() {
   const [signedIn, setSignedIn] = useState(false);
   const [reading, setReading] = useState<ReadingSpot | null>(null);
   useEffect(() => {
-    isSignedIn().then(setSignedIn);
+    isSignedIn().then((si) => {
+      setSignedIn(si);
+      // First-run persona overlay is for newcomers only; a signed-in user on a
+      // new device already chose how they learn (or deliberately didn't).
+      if (!si && !loadPersona() && !isOnboarded()) setShowOnboarding(true);
+    });
     setReading(loadReadingSpot());
   }, []);
   const router = useRouter();
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  // Hands-free: the next completed answer is read aloud automatically
-  const autoSpeakRef = useRef(false);
+  // Hands-free: the streaming answer is spoken sentence-by-sentence as it arrives
+  const liveSpeakRef = useRef(false);
 
   useEffect(() => {
-    const stored = loadPersona();
-    setPersona(stored);
-    if (!stored && !isOnboarded()) setShowOnboarding(true);
+    setPersona(loadPersona());
 
     fetch("/api/v1/personas")
       .then((r) => (r.ok ? r.json() : []))
@@ -488,7 +491,8 @@ export default function HomePage() {
         }),
       });
       if (!res.ok || !res.body) {
-        autoSpeakRef.current = false;
+        liveSpeakRef.current = false;
+        liveSpeech.stop();
         const body = await res.json().catch(() => null);
         setError(body?.detail ?? `Something went wrong (${res.status}). Try again.`);
         setMessages(base);
@@ -502,6 +506,7 @@ export default function HomePage() {
           assistant = { ...assistant, sources: evt.sources };
         } else if (evt.event === "delta" && evt.text) {
           assistant = { ...assistant, content: assistant.content + evt.text };
+          if (liveSpeakRef.current) liveSpeech.push(evt.text); // speaks while streaming
         } else if (evt.event === "done") {
           assistant = {
             ...assistant,
@@ -512,12 +517,13 @@ export default function HomePage() {
           };
           if (evt.conversation_id) setConversationId(evt.conversation_id);
           refreshRecent();
-          if (autoSpeakRef.current) {
-            autoSpeakRef.current = false;
-            speakText(assistant.content);
+          if (liveSpeakRef.current) {
+            liveSpeakRef.current = false;
+            liveSpeech.finish(); // flush the trailing sentence
           }
         } else if (evt.event === "error") {
-          autoSpeakRef.current = false;
+          liveSpeakRef.current = false;
+          liveSpeech.stop();
           setError(evt.detail ?? "The answer engine failed mid-response. Try again.");
           return;
         }
@@ -540,7 +546,8 @@ export default function HomePage() {
         }
       }
     } catch {
-      autoSpeakRef.current = false;
+      liveSpeakRef.current = false;
+      liveSpeech.stop();
       setError("Could not reach the server. Try again in a moment.");
       setMessages(base);
     } finally {
@@ -581,7 +588,7 @@ export default function HomePage() {
 
       {threadActive && (
         <div className="flex items-center justify-between pt-4 pb-4">
-          <span className="text-xs text-muted/80">
+          <span className="text-xs text-muted">
             {activePersona ? `Learning as ${activePersona.label}` : "FaithBrains"}
           </span>
           <button
@@ -595,7 +602,7 @@ export default function HomePage() {
       )}
 
       {threadActive && (
-        <section className="space-y-5 pb-6">
+        <section className="space-y-5 pb-6" aria-live="polite">
           {messages.map((m, i) =>
             m.role === "user" ? (
               <div key={i} className="flex justify-end">
@@ -633,11 +640,12 @@ export default function HomePage() {
               ? "Ask a follow-up…"
               : "Ask anything, search a word, or jump to a verse like 2:255"
           }
-          className="w-full resize-none bg-transparent px-2 py-1.5 text-text placeholder:text-muted/60 focus:outline-none"
+          aria-label="Ask a question, search a word, or jump to a verse"
+          className="w-full resize-none bg-transparent px-2 py-1.5 text-text placeholder:text-muted"
         />
         <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted/70">Speed</span>
+            <span className="text-xs text-muted">Speed</span>
             <div className="relative" ref={effortRef}>
               <button
                 type="button"
@@ -665,7 +673,10 @@ export default function HomePage() {
               {effortOpen && (
                 <ul
                   role="listbox"
-                  className="absolute top-full left-0 z-30 mt-1.5 w-60 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-xl shadow-black/60"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEffortOpen(false);
+                  }}
+                  className="absolute top-full left-0 z-30 mt-1.5 w-60 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lift"
                 >
                   {EFFORTS.map((e) => (
                     <li key={e}>
@@ -684,7 +695,7 @@ export default function HomePage() {
                         }`}
                       >
                         <span className="text-xs capitalize">{e}</span>
-                        <span className="text-[10px] text-muted/50">{EFFORT_HINT[e]}</span>
+                        <span className="text-[10px] text-muted">{EFFORT_HINT[e]}</span>
                       </button>
                     </li>
                   ))}
@@ -714,8 +725,9 @@ export default function HomePage() {
             large
             onText={(t) => {
               if (handsFreeEnabled()) {
-                autoSpeakRef.current = true;
-                submit(t); // speak → ask → the answer is read aloud, no taps
+                liveSpeakRef.current = true;
+                liveSpeech.begin();
+                submit(t); // speak → ask → the answer talks back as it streams
               } else {
                 setQuestion((q) => (q ? q.trimEnd() + " " : "") + t);
               }
@@ -726,7 +738,7 @@ export default function HomePage() {
       )}
 
       {error && (
-        <div className="mt-4 rounded-lg border border-error/40 bg-error/10 p-4 text-sm text-error">
+        <div role="alert" className="mt-4 rounded-lg border border-error/40 bg-error/10 p-4 text-sm text-error">
           {error}
         </div>
       )}
@@ -748,7 +760,7 @@ export default function HomePage() {
 
       {!threadActive && personas.length > 0 && (
         <div className="mt-8">
-          <p className="mb-2 text-center text-xs tracking-wide text-muted/70">
+          <p className="mb-2 text-center text-xs tracking-wide text-muted">
             I&apos;m learning as…
           </p>
           <div className="flex flex-wrap justify-center gap-2">
@@ -827,18 +839,37 @@ export default function HomePage() {
           </h2>
           <div className="space-y-2">
             {recent.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => loadConversation(c.id)}
-                className="block w-full rounded-lg border border-border bg-surface px-4 py-3 text-left transition-colors hover:border-primary/50 hover:bg-elevated"
-              >
-                <span className="block truncate text-sm text-text">{c.title}</span>
-                <span className="mt-0.5 block text-xs text-muted/70">
-                  {Math.floor(c.message_count / 2)}{" "}
-                  {c.message_count >= 4 ? "exchanges" : "exchange"}
-                </span>
-              </button>
+              <div key={c.id} className="relative">
+                <button
+                  type="button"
+                  onClick={() => loadConversation(c.id)}
+                  className="block w-full rounded-lg border border-border bg-surface px-4 py-3 pr-12 text-left transition-colors hover:border-primary/50 hover:bg-elevated"
+                >
+                  <span className="block truncate text-sm text-text">{c.title}</span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    {Math.floor(c.message_count / 2)}{" "}
+                    {c.message_count >= 4 ? "exchanges" : "exchange"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete conversation: ${c.title}`}
+                  title="Delete conversation"
+                  onClick={() => {
+                    setRecent((r) => r.filter((x) => x.id !== c.id));
+                    if (conversationId === c.id) newConversation();
+                    fetch(`/api/v1/conversations/${c.id}`, {
+                      method: "DELETE",
+                      headers: sessionHeaders(),
+                    }).catch(() => refreshRecent());
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:text-error"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                  </svg>
+                </button>
+              </div>
             ))}
           </div>
         </section>

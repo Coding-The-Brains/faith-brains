@@ -71,6 +71,15 @@ _CONDENSE_SYSTEM = (
 
 _CITATION_MARKER = re.compile(r"\[\d+\]")
 
+# Product rule: no em dashes anywhere user-visible. The model is told not to use
+# them, but this is the single choke point every answer passes through (model
+# output, canned lanes, and cache writes), so the rule holds even when it slips.
+_EM_DASH = re.compile(r"\s*—\s*")
+
+
+def strip_em_dashes(text: str) -> str:
+    return _EM_DASH.sub(", ", text)
+
 
 def _persona_hint(persona: str | None) -> str:
     """Style/depth addendum for a known persona; empty string otherwise.
@@ -267,7 +276,7 @@ class AnswerService:
     def _respond(self, classification, answer: str, sources: list) -> dict:
         return {
             "category": classification.category,
-            "answer": answer,
+            "answer": strip_em_dashes(answer),
             "sources": sources,
             "disclaimer": guard.STANDARD_DISCLAIMER,
         }

@@ -72,7 +72,7 @@ export default function WordByWord({ surah, ayah }: { surah: number; ayah: numbe
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[10px] text-muted/70">
+              <p className="mt-2 text-[10px] text-muted">
                 Tap a word for its transliteration · word data: quran.com
               </p>
             </>

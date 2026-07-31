@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import HashScroll from "@/components/HashScroll";
 import ReadingTracker from "@/components/ReadingTracker";
 import VerseCard from "@/components/VerseCard";
 import { api, saheeh } from "@/lib/api";
@@ -54,6 +55,7 @@ export default async function SurahPage({
 
   return (
     <div className="mx-auto max-w-3xl">
+      <HashScroll />
       <ReadingTracker surah={n} name={surah.name_transliterated} page={page} />
       <header className="mb-8 text-center">
         <p lang="ar" className="text-4xl text-accent">

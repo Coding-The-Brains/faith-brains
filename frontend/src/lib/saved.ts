@@ -86,9 +86,11 @@ export function clearLocalSaved(): void {
 
 export function removeSaved(id: string): SavedItem[] {
   const items = loadSaved();
-  const removed = items.find((s) => s.id === id);
   const next = items.filter((s) => s.id !== id);
   window.localStorage.setItem(KEY, JSON.stringify(next));
-  if (removed) syncServer(removed, false);
+  // Always tell the server: on a second device the item exists server-side
+  // without a local copy, and skipping the call made removals reappear.
+  const kind: "quran" | "hadith" = id.startsWith("hadith:") ? "hadith" : "quran";
+  syncServer({ id, kind }, false);
   return next;
 }

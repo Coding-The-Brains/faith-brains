@@ -100,6 +100,14 @@ class SearchService:
         if not query:
             return {"mode": "empty", "signals_used": [], "results": []}
 
+        # An unknown translation key would silently produce zero Quran results
+        # (and reference hits without translation text); fall back to the default.
+        if (
+            translation_key != DEFAULT_TRANSLATION_KEY
+            and await self._edition_id(session, translation_key) is None
+        ):
+            translation_key = DEFAULT_TRANSLATION_KEY
+
         # 1. Reference short-circuits
         if scope in ("all", "quran"):
             qref = parse_quran_reference(query)

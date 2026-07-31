@@ -118,7 +118,8 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--primary);
+    /* accent, not primary: bright teal on white fails non-text contrast in light theme */
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
 
@@ -127,7 +128,15 @@
     direction: rtl;
   }
 
+  /* Urdu is Arabic-script; inline phrases keep their surrounding direction */
+  [lang="ur"] {
+    font-family: var(--font-amiri), serif;
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto !important;
+    }
     *,
     *::before,
     *::after {
@@ -136,6 +145,23 @@
       transition-duration: 0.01ms !important;
       transition-delay: 0.01ms !important;
     }
+  }
+
+  /* Keyboard users land here first; invisible until focused */
+  .skip-link {
+    position: fixed;
+    top: -100%;
+    left: 1rem;
+    z-index: 100;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    background: var(--accent);
+    color: var(--surface);
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+  .skip-link:focus-visible {
+    top: 1rem;
   }
 }
 

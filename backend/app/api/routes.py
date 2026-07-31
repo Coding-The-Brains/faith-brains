@@ -184,6 +184,17 @@ async def verse_words(
     """
     from sqlalchemy import text as sql
 
+    known = (
+        await session.execute(
+            select(QuranVerse.id).where(
+                QuranVerse.surah_number == surah_number,
+                QuranVerse.ayah_number == ayah_number,
+            )
+        )
+    ).scalar_one_or_none()
+    if known is None:
+        raise HTTPException(404, "verse not found")
+
     rows = (await session.execute(sql(_WORDS_SELECT), {"s": surah_number, "a": ayah_number})).all()
     if not rows:
         import httpx

@@ -6,7 +6,7 @@ permission. Everything here is invisible to non-admin accounts (403).
 """
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -59,6 +59,34 @@ async def overview(session: AsyncSession = Depends(get_session)):
     avg_latency = (
         await session.execute(select(func.avg(AskLog.latency_ms)).where(AskLog.status == "ok"))
     ).scalar()
+
+    # 14-day activity series for the dashboard chart, gaps zero-filled
+    since = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=13)
+    day_col = func.date_trunc("day", AskLog.created_at)
+    day_rows = (
+        await session.execute(
+            select(
+                day_col,
+                func.count(),
+                func.count().filter(AskLog.status == "error"),
+            )
+            .where(AskLog.created_at >= since)
+            .group_by(day_col)
+        )
+    ).all()
+    by_day = {d.date().isoformat(): (n, e) for d, n, e in day_rows}
+    asks_by_day = []
+    for i in range(14):
+        key = (since + timedelta(days=i)).date().isoformat()
+        n, e = by_day.get(key, (0, 0))
+        asks_by_day.append(schemas.AskDayOut(day=key, count=n, errors=e))
+
+    new_users_7d = (
+        await session.execute(
+            select(func.count()).where(User.created_at >= datetime.now(UTC) - timedelta(days=7))
+        )
+    ).scalar() or 0
+
     return schemas.AdminStatsOut(
         verses=await count(select(func.count()).select_from(QuranVerse)),
         hadiths=await count(select(func.count()).select_from(HadithRecord)),
@@ -74,6 +102,8 @@ async def overview(session: AsyncSession = Depends(get_session)):
         avg_latency_ms=float(avg_latency) if avg_latency is not None else None,
         users=await count(select(func.count()).select_from(User)),
         notes=await count(select(func.count()).select_from(ContentNote)),
+        asks_by_day=asks_by_day,
+        new_users_7d=new_users_7d,
     )
 
 
@@ -324,11 +354,20 @@ async def find_hadith(
     if collection:
         stmt = stmt.where(HadithCollection.key == collection)
     q = q.strip()
-    if re.fullmatch(r"\d+[a-z]?", q.lower()):
-        stmt = stmt.where(HadithRecord.hadith_number == q.lower())
-    else:
-        stmt = stmt.where(HadithRecord.text_english.ilike(f"%{q}%"))
-    rows = (await session.execute(stmt)).all()
+    # A single token might be a hadith number of any shape ("2564a", "wtest1"):
+    # try the exact number first, then fall back to text search.
+    if re.fullmatch(r"\S+", q):
+        rows = (
+            await session.execute(stmt.where(HadithRecord.hadith_number == q.lower()))
+        ).all()
+        if rows:
+            return [_hadith_out(r, c) for r, c in rows]
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    rows = (
+        await session.execute(
+            stmt.where(HadithRecord.text_english.ilike(f"%{escaped}%", escape="\\"))
+        )
+    ).all()
     return [_hadith_out(r, c) for r, c in rows]
 
 

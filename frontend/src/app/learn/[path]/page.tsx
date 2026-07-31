@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { isSignedIn } from "@/lib/auth";
 import { sessionHeaders } from "@/lib/session";
@@ -92,7 +91,7 @@ function Quiz({
               })}
             </div>
             {submitted && (
-              <p className="mt-2 text-[11px] text-muted/70">Source: {q.why}</p>
+              <p className="mt-2 text-[11px] text-muted">Source: {q.why}</p>
             )}
           </li>
         ))}
@@ -131,9 +130,10 @@ function Quiz({
 
 export default function PathPage({ params }: { params: Promise<{ path: string }> }) {
   const { path } = use(params);
-  const router = useRouter();
   const [detail, setDetail] = useState<PathDetail | null>(null);
   const [missing, setMissing] = useState(false);
+  // Signed-out taps get an inline nudge instead of being yanked to /account
+  const [hintStep, setHintStep] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/v1/learn/paths/${path}`, { headers: sessionHeaders() })
@@ -141,21 +141,32 @@ export default function PathPage({ params }: { params: Promise<{ path: string }>
       .catch(() => setMissing(true));
   }, [path]);
 
+  function setStepDone(key: string, completed: boolean) {
+    setDetail((d) =>
+      d
+        ? { ...d, steps: d.steps.map((s) => (s.key === key ? { ...s, completed } : s)) }
+        : d
+    );
+  }
+
   async function markStudied(step: Step) {
     if (!detail || step.completed) return;
     // Progress belongs to an account, like saves; reading stays open to everyone
     if (!(await isSignedIn())) {
-      router.push("/account");
+      setHintStep(step.key);
+      setTimeout(() => setHintStep((h) => (h === step.key ? null : h)), 6000);
       return;
     }
-    setDetail({
-      ...detail,
-      steps: detail.steps.map((s) => (s.key === step.key ? { ...s, completed: true } : s)),
-    });
+    setStepDone(step.key, true);
+    // If the write fails, take the checkmark back: a permanent green lie is worse
     fetch(`/api/v1/learn/paths/${path}/steps/${step.key}/complete`, {
       method: "POST",
       headers: sessionHeaders(),
-    }).catch(() => {});
+    })
+      .then((r) => {
+        if (!r.ok) setStepDone(step.key, false);
+      })
+      .catch(() => setStepDone(step.key, false));
   }
 
   if (missing) {
@@ -213,18 +224,28 @@ export default function PathPage({ params }: { params: Promise<{ path: string }>
                 >
                   Open in search
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => markStudied(step)}
-                  disabled={step.completed}
-                  className={
-                    step.completed
-                      ? "rounded-full border border-primary/40 px-4 py-1 text-xs font-bold text-accent"
-                      : "rounded-full bg-primary px-4 py-1 text-xs font-bold text-on-primary hover:opacity-90"
-                  }
-                >
-                  {step.completed ? "✓ Studied" : "Mark studied"}
-                </button>
+                <span className="flex items-center gap-3">
+                  {hintStep === step.key && (
+                    <span role="status" className="text-xs text-muted">
+                      <Link href="/account" className="text-accent underline underline-offset-2">
+                        Sign in
+                      </Link>{" "}
+                      to save progress
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => markStudied(step)}
+                    disabled={step.completed}
+                    className={
+                      step.completed
+                        ? "rounded-full border border-primary/40 px-4 py-1 text-xs font-bold text-accent"
+                        : "cursor-pointer rounded-full bg-primary px-4 py-1 text-xs font-bold text-on-primary hover:opacity-90"
+                    }
+                  >
+                    {step.completed ? "✓ Studied" : "Mark studied"}
+                  </button>
+                </span>
               </div>
             </div>
           </li>
