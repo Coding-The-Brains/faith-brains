@@ -5,6 +5,8 @@ admin signs in like anyone else and the httpOnly session cookie carries the
 permission. Everything here is invisible to non-admin accounts (403).
 """
 
+import asyncio
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 
@@ -12,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.embeddings import get_embedder
 from app.api import schemas
 from app.api.auth_routes import current_user
 from app.db.engine import get_session
@@ -21,6 +24,7 @@ from app.db.models import (
     Conversation,
     HadithCollection,
     HadithRecord,
+    HadithRevision,
     Learner,
     QuranTranslation,
     QuranVerse,
@@ -28,6 +32,8 @@ from app.db.models import (
     User,
 )
 from app.retrieval.arabic import normalize_arabic
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin")
 
@@ -301,6 +307,35 @@ async def delete_note(note_id: int, session: AsyncSession = Depends(get_session)
 # --- hadith entries (add and correct) -------------------------------------------
 
 
+def _snapshot(r: HadithRecord) -> dict:
+    """The editable fields, stored verbatim in every revision row."""
+    return {
+        "text_english": r.text_english,
+        "text_arabic": r.text_arabic,
+        "book_name": r.book_name,
+        "gradings": r.gradings or [],
+    }
+
+
+async def _embed_record(record: HadithRecord) -> None:
+    """Vector search should reflect admin content immediately, not at the next
+    bulk embed run. Best-effort with a hard timeout: on failure the row stays
+    keyword- and reference-searchable, which is how it worked before."""
+    if not record.text_english:
+        return
+    embedder = get_embedder()
+    if not embedder.available:
+        return
+    try:
+        vectors = await asyncio.wait_for(
+            embedder.embed([record.text_english[:12000]], "document"), timeout=20
+        )
+        record.embedding = vectors[0]
+        record.embedding_model = embedder.model
+    except Exception:  # noqa: BLE001 — embedding is enhancement, never a blocker
+        log.warning("admin hadith embed failed; row stays lexical-only", exc_info=True)
+
+
 def _hadith_out(r: HadithRecord, collection: HadithCollection) -> schemas.AdminHadithOut:
     grade = None
     if r.gradings:
@@ -374,7 +409,7 @@ async def find_hadith(
 @router.post("/hadith", response_model=schemas.AdminHadithOut)
 async def add_hadith(
     body: schemas.AdminHadithIn,
-    admin: User = Depends(require_admin),  # noqa: ARG001 — auth gate
+    admin: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
     collection = (
@@ -409,23 +444,30 @@ async def add_hadith(
         text_arabic_normalized=normalize_arabic(arabic) if arabic else None,
         gradings=[{"name": "Added by admin", "grade": body.grade.strip()}] if body.grade else [],
         reference_schemes={},
-        # ponytail: embedding left empty — the entry is findable by reference and
-        # keyword search immediately; vector search picks it up on the next embed run
     )
     session.add(record)
+    await session.flush()
+    await _embed_record(record)  # searchable by meaning right away, not next embed run
+    session.add(
+        HadithRevision(
+            record_id=record.id,
+            changed_by=admin.id,
+            action="add",
+            reference=f"{collection.key} {number}",
+            before=None,
+            after=_snapshot(record),
+        )
+    )
     await session.commit()
     await session.refresh(record)
     return _hadith_out(record, collection)
 
 
-@router.patch(
-    "/hadith/{record_id}",
-    response_model=schemas.AdminHadithOut,
-    dependencies=[Depends(require_admin)],
-)
+@router.patch("/hadith/{record_id}", response_model=schemas.AdminHadithOut)
 async def edit_hadith(
     record_id: int,
     body: schemas.AdminHadithPatch,
+    admin: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
     row = (
@@ -438,12 +480,11 @@ async def edit_hadith(
     if row is None:
         raise HTTPException(404, "Hadith not found.")
     record, collection = row
+    before = _snapshot(record)
     if body.text_english is not None:
         if not body.text_english.strip():
             raise HTTPException(400, "The English text is empty.")
         record.text_english = body.text_english.strip()
-        # the corrected text must be re-embedded before vector search reflects it
-        record.embedding = None
     if body.text_arabic is not None:
         arabic = body.text_arabic.strip() or None
         record.text_arabic = arabic
@@ -454,6 +495,97 @@ async def edit_hadith(
         record.gradings = (
             [{"name": "Corrected by admin", "grade": body.grade.strip()}] if body.grade.strip() else []
         )
+    after = _snapshot(record)
+    if after != before:
+        if after["text_english"] != before["text_english"]:
+            # vector search must reflect the corrected text, not the old wording
+            record.embedding = None
+            await _embed_record(record)
+        session.add(
+            HadithRevision(
+                record_id=record.id,
+                changed_by=admin.id,
+                action="edit",
+                reference=f"{collection.key} {record.hadith_number}",
+                before=before,
+                after=after,
+            )
+        )
     await session.commit()
     await session.refresh(record)
     return _hadith_out(record, collection)
+
+
+@router.delete("/hadith/{record_id}", status_code=204)
+async def delete_hadith(
+    record_id: int,
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    row = (
+        await session.execute(
+            select(HadithRecord, HadithCollection)
+            .join(HadithCollection, HadithRecord.collection_id == HadithCollection.id)
+            .where(HadithRecord.id == record_id)
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(404, "Hadith not found.")
+    record, collection = row
+    # Canonical corpus rows are never deletable; only entries an admin added.
+    was_added = (
+        await session.execute(
+            select(HadithRevision.id).where(
+                HadithRevision.record_id == record_id, HadithRevision.action == "add"
+            )
+        )
+    ).first()
+    if was_added is None:
+        raise HTTPException(
+            400, "Only admin-added entries can be deleted. Correct the text instead."
+        )
+    session.add(
+        HadithRevision(
+            record_id=None,  # the record is going away; the snapshot preserves it
+            changed_by=admin.id,
+            action="delete",
+            reference=f"{collection.key} {record.hadith_number}",
+            before=_snapshot(record),
+            after=None,
+        )
+    )
+    await session.delete(record)
+    await session.commit()
+
+
+@router.get(
+    "/hadith/revisions",
+    response_model=list[schemas.HadithRevisionOut],
+    dependencies=[Depends(require_admin)],
+)
+async def hadith_revisions(
+    limit: int = Query(50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every admin change to hadith content, newest first: the review trail."""
+    rows = (
+        await session.execute(
+            select(HadithRevision, User.email)
+            .join(User, User.id == HadithRevision.changed_by)
+            .order_by(HadithRevision.changed_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    return [
+        schemas.HadithRevisionOut(
+            id=r.id,
+            record_id=r.record_id,
+            action=r.action,
+            reference=r.reference,
+            changed_by_email=email,
+            changed_at=r.changed_at.isoformat(),
+            before=r.before,
+            after=r.after,
+        )
+        for r, email in rows
+    ]

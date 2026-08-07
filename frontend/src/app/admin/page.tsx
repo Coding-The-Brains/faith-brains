@@ -68,6 +68,24 @@ type Hadith = {
   grade: string | null;
 };
 
+type Snapshot = {
+  text_english: string | null;
+  text_arabic: string | null;
+  book_name: string | null;
+  gradings: { name?: string; grade?: string }[];
+};
+
+type Revision = {
+  id: number;
+  record_id: number | null;
+  action: "add" | "edit" | "delete";
+  reference: string;
+  changed_by_email: string;
+  changed_at: string;
+  before: Snapshot | null;
+  after: Snapshot | null;
+};
+
 const TABS = ["Overview", "Notes", "Hadith", "Users"] as const;
 type Tab = (typeof TABS)[number];
 
@@ -510,15 +528,23 @@ function HadithTab() {
   const [results, setResults] = useState<Hadith[]>([]);
   const [editing, setEditing] = useState<Hadith | null>(null);
   const [editMsg, setEditMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [revisions, setRevisions] = useState<Revision[] | null>(null);
+  const [confirmDel, setConfirmDel] = useState<number | null>(null);
+  const delTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadRevisions = useCallback(() => {
+    api<Revision[]>("/hadith/revisions").then(setRevisions).catch(() => setRevisions([]));
+  }, []);
 
   useEffect(() => {
+    loadRevisions();
     api<Collection[]>("/hadith/collections")
       .then((c) => {
         setCollections(c);
         if (c.length) setCollection(c[0].key);
       })
       .catch(() => {});
-  }, []);
+  }, [loadRevisions]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -538,6 +564,7 @@ function HadithTab() {
       });
       setDraft(emptyDraft);
       setMsg({ kind: "ok", text: `Added ${saved.collection_name} ${saved.hadith_number}.` });
+      loadRevisions();
     } catch (err) {
       setMsg({ kind: "error", text: (err as Error).message });
     } finally {
@@ -573,6 +600,38 @@ function HadithTab() {
       setEditing(null);
       setResults((r) => r.map((h) => (h.id === saved.id ? saved : h)));
       setEditMsg({ kind: "ok", text: `Saved ${saved.collection_name} ${saved.hadith_number}.` });
+      loadRevisions();
+    } catch (err) {
+      setEditMsg({ kind: "error", text: (err as Error).message });
+    }
+  }
+
+  async function removeHadith(h: Hadith) {
+    setConfirmDel(null);
+    try {
+      await api(`/hadith/${h.id}`, { method: "DELETE" });
+      setResults((r) => r.filter((x) => x.id !== h.id));
+      setEditMsg({ kind: "ok", text: `Deleted ${h.collection_name} ${h.hadith_number}.` });
+      loadRevisions();
+    } catch (err) {
+      setEditMsg({ kind: "error", text: (err as Error).message });
+    }
+  }
+
+  async function restore(rev: Revision) {
+    if (!rev.record_id || !rev.before) return;
+    try {
+      await api<Hadith>(`/hadith/${rev.record_id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          text_english: rev.before.text_english,
+          text_arabic: rev.before.text_arabic ?? "",
+          book_name: rev.before.book_name ?? "",
+          grade: rev.before.gradings?.[0]?.grade ?? "",
+        }),
+      });
+      setEditMsg({ kind: "ok", text: `Restored ${rev.reference} to the earlier version.` });
+      loadRevisions();
     } catch (err) {
       setEditMsg({ kind: "error", text: (err as Error).message });
     }
@@ -680,13 +739,36 @@ function HadithTab() {
                   {h.collection_name} {h.hadith_number}
                   {h.grade ? ` · ${h.grade}` : ""}
                 </p>
-                <button
-                  type="button"
-                  className={ghostBtnCls}
-                  onClick={() => setEditing(editing?.id === h.id ? null : { ...h })}
-                >
-                  {editing?.id === h.id ? "Cancel" : "Edit"}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={ghostBtnCls}
+                    onClick={() => setEditing(editing?.id === h.id ? null : { ...h })}
+                  >
+                    {editing?.id === h.id ? "Cancel" : "Edit"}
+                  </button>
+                  {confirmDel === h.id ? (
+                    <button
+                      type="button"
+                      className="cursor-pointer rounded-full border border-error/60 px-3.5 py-1.5 text-xs font-bold text-error"
+                      onClick={() => removeHadith(h)}
+                    >
+                      Delete, sure?
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={ghostBtnCls}
+                      onClick={() => {
+                        setConfirmDel(h.id);
+                        if (delTimer.current) clearTimeout(delTimer.current);
+                        delTimer.current = setTimeout(() => setConfirmDel(null), 4000);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               </div>
               {editing?.id === h.id ? (
                 <form
@@ -742,6 +824,57 @@ function HadithTab() {
                 </p>
               )}
             </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold tracking-tight text-accent">Recent changes</h2>
+        <p className="mt-1 text-sm text-muted">
+          Every add, correction, and deletion, with who made it and what it said before.
+        </p>
+        <div className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface px-4">
+          {revisions === null && <Skeleton className="my-3 h-16" />}
+          {revisions?.length === 0 && (
+            <p className="py-3 text-sm text-muted">No changes yet.</p>
+          )}
+          {revisions?.map((r) => (
+            <details key={r.id} className="group py-2.5">
+              <summary className="flex cursor-pointer items-baseline gap-3">
+                <span
+                  className={`w-14 shrink-0 font-mono text-[10px] uppercase tracking-[0.15em] ${
+                    r.action === "delete" ? "text-error" : r.action === "add" ? "text-success" : "text-accent"
+                  }`}
+                >
+                  {r.action}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs uppercase tracking-[0.15em] text-text">
+                  {r.reference}
+                </span>
+                <span className="hidden shrink-0 text-xs text-muted sm:inline">
+                  {r.changed_by_email} · {new Date(r.changed_at).toLocaleString()}
+                </span>
+              </summary>
+              <div className="mt-2 space-y-2 pb-1 text-sm leading-relaxed">
+                {r.before?.text_english && (
+                  <div>
+                    <p className="eyebrow">Before</p>
+                    <p className="mt-1 text-text/70">{r.before.text_english}</p>
+                  </div>
+                )}
+                {r.after?.text_english && (
+                  <div>
+                    <p className="eyebrow">{r.action === "add" ? "Added" : "After"}</p>
+                    <p className="mt-1 text-text/90">{r.after.text_english}</p>
+                  </div>
+                )}
+                {r.action === "edit" && r.record_id && r.before && (
+                  <button type="button" className={ghostBtnCls} onClick={() => restore(r)}>
+                    Restore this earlier version
+                  </button>
+                )}
+              </div>
+            </details>
           ))}
         </div>
       </section>

@@ -366,6 +366,17 @@ class AdminHadithOut(BaseModel):
     grade: str | None
 
 
+class HadithRevisionOut(BaseModel):
+    id: int
+    record_id: int | None  # None once the record was deleted
+    action: str  # add | edit | delete
+    reference: str
+    changed_by_email: str
+    changed_at: str
+    before: dict | None
+    after: dict | None
+
+
 class AuthIn(BaseModel):
     email: str
     password: str

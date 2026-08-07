@@ -277,6 +277,32 @@ class PasswordReset(Base):
     )
 
 
+class HadithRevision(Base):
+    """Audit trail for admin hadith changes. For a religious-content product an
+    unlogged silent change to hadith text is the worst-case integrity failure,
+    so every add/edit/delete stores who did it and full before/after snapshots."""
+
+    __tablename__ = "hadith_revisions"
+    __table_args__ = (
+        sa.Index("ix_hadith_revisions_changed", "changed_at"),
+        sa.Index("ix_hadith_revisions_record", "record_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # SET NULL so history (incl. the snapshot) survives a record's deletion
+    record_id: Mapped[int | None] = mapped_column(
+        sa.ForeignKey("hadith_records.id", ondelete="SET NULL")
+    )
+    changed_by: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(sa.Text)  # add | edit | delete
+    reference: Mapped[str] = mapped_column(sa.Text)  # "bukhari 6018", denormalized
+    before = mapped_column(JSONB, nullable=True)
+    after = mapped_column(JSONB, nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
+    )
+
+
 class ContentNote(Base):
     """Admin-written note pinned to a Quran verse or hadith reference.
 
